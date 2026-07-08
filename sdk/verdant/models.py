@@ -84,10 +84,10 @@ class BiasStageOutput(VerdantBaseModel):
     summary: str
     confidence: float = Field(ge=0.0, le=1.0)
 
-    @field_validator("bias_score")
+    @field_validator("bias_score", mode="before")
     @classmethod
-    def _clamp_bias_score(cls, value: int) -> int:
-        return max(0, min(100, value))
+    def _clamp_bias_score(cls, value: Any) -> int:
+        return max(0, min(100, int(value)))
 
 
 class ExplainStageOutput(VerdantBaseModel):
@@ -105,10 +105,10 @@ class TrustStageOutput(VerdantBaseModel):
     alerts: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
 
-    @field_validator("trust_score")
+    @field_validator("trust_score", mode="before")
     @classmethod
-    def _clamp_trust_score(cls, value: int) -> int:
-        return max(0, min(100, value))
+    def _clamp_trust_score(cls, value: Any) -> int:
+        return max(0, min(100, int(value)))
 
 
 class PipelineStageOutputs(VerdantBaseModel):

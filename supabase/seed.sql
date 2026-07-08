@@ -58,6 +58,22 @@ values
     'seed',
     0.850,
     true
+),
+(
+    'healthcare',
+    'Nigerian Healthcare Baseline',
+    '2026.07.01',
+    '["rural access", "maternal health", "language access", "cost sensitivity", "regional care gaps"]'::jsonb,
+    'Use clinically relevant signals while accounting for access disparities, language barriers, and the risk of overconfident triage.',
+    '["Do not substitute proxy social cues for clinical evidence.", "Surface uncertainty for human review when symptoms are ambiguous.", "Treat safety-critical decisions as high review priority."]'::jsonb,
+    '{
+        "context": "healthcare",
+        "risk_focus": ["access disparity", "triage risk", "language barrier"],
+        "recommended_review": ["clinical evidence", "urgency", "need for human escalation"]
+    }'::jsonb,
+    'seed',
+    0.900,
+    true
 )
 on conflict (context_type)
 do update set
