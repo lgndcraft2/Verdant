@@ -87,17 +87,6 @@ function SidebarContent({
           Documentation
         </Link>
       </div>
-
-      {/* Footer */}
-      <div className="border-t border-rose-950/10 px-5 py-4 dark:border-white/10">
-        <p className="mb-2 text-xs text-slate-400 dark:text-slate-500">VERDANT v0.1.0-beta</p>
-        <Link
-          href="/"
-          className="text-xs font-medium text-slate-500 transition-colors hover:text-rose-700 dark:text-slate-400 dark:hover:text-rose-400"
-        >
-          ← Back to site
-        </Link>
-      </div>
     </div>
   );
 }

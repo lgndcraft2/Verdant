@@ -21,6 +21,147 @@ print(result.flags)         # ["proxy_language_detected"]
 print(result.explanation)   # "Role phrasing may disadvantage..."
 print(result.audit)         # Full reasoning chain JSON`;
 
+const nonAiSample = String.raw`from verdant import VerdantClient
+
+client = VerdantClient(api_key="vd_live_...")
+
+# Your existing rules-based function — no AI involved
+def legacy_lending_rules(applicant_data: dict) -> dict:
+    if applicant_data["location"] == "Rural" and applicant_data["gender"] == "Female":
+        return {"status": "rejected", "reason": "High risk demographic profile"}
+    return {"status": "approved", "limit": 50000}
+
+applicant = {"name": "Amina", "location": "Rural", "gender": "Female"}
+
+# Wrap it exactly like an AI call
+result = await client.wrap(
+    fn=legacy_lending_rules,
+    context_type="lending",
+    input_text=str(applicant),
+    applicant_data=applicant,
+)
+
+print(result.output)       # {"status": "rejected", ...}
+print(result.trust_score)  # Low — bias detected
+print(result.flags)        # ["demographic_bias", "gender_proxy"]`;
+
+const rawValueSample = String.raw`from verdant import VerdantClient
+
+client = VerdantClient(api_key="vd_live_...")
+
+# You already have the output from somewhere else
+my_existing_output = "The candidate is rejected due to cultural fit concerns."
+
+# Option 1: Lambda wrapper (quick one-liner)
+result = await client.wrap(
+    fn=lambda **kwargs: my_existing_output,
+    context_type="hiring",
+    input_text="Evaluate this candidate for the analyst role.",
+)
+
+# Option 2: Async function wrapper (if you prefer explicit code)
+async def existing_output(**kwargs):
+    return my_existing_output
+
+result = await client.wrap(
+    fn=existing_output,
+    context_type="hiring",
+    input_text="Evaluate this candidate for the analyst role.",
+)
+
+print(result.trust_score)  # Pipeline runs on the value as-is
+print(result.flags)        # Any bias flags detected in the text
+print(result.explanation)  # Plain-language reasoning`;
+
+const errorHandlingSample = String.raw`from verdant import VerdantClient
+
+client = VerdantClient(api_key="vd_live_...")
+
+async def flaky_ai_call(**kwargs):
+    raise ConnectionError("API timeout")
+
+# VERDANT catches the crash — your app stays up
+result = await client.wrap(
+    fn=flaky_ai_call,
+    context_type="lending",
+    input_text="Evaluate this loan application.",
+)
+
+print(result.output)       # "" (empty — no upstream output)
+print(result.trust_score)  # ≤ 15 (capped to critical)
+print(result.flags)        # []
+print(result.explanation)  # "...The wrapped AI call failed: API timeout."
+
+# The audit still records everything
+print(result.audit.stages.trust.risk_level)  # "critical"
+print(result.audit.stages.trust.alerts)      # ["Wrapped function call failed"]
+print(result.audit.error)                    # "API timeout"`;
+
+const auditBreakdownSample = String.raw`result = await client.wrap(fn=my_ai_call, context_type="hiring", ...)
+audit = result.audit
+
+# Top-level audit fields
+audit.request_id       # UUID — unique per pipeline run
+audit.created_at       # UTC timestamp
+audit.context_type     # "hiring", "lending", etc.
+audit.input_text       # The input you provided
+audit.output_text      # Stringified AI output
+audit.model_name       # "claude-sonnet-4-6"
+audit.duration_ms      # Pipeline execution time
+audit.error            # None if successful, error string if failed
+
+# Per-stage outputs
+audit.stages.intent.detected_intent     # e.g. "candidate_evaluation"
+audit.stages.intent.confidence          # 0.0–1.0
+audit.stages.baseline.baseline_name     # e.g. "ng_hiring_v3"
+audit.stages.baseline.baseline_version  # e.g. "3.1"
+audit.stages.bias.severity              # "low" | "medium" | "high" | "critical"
+audit.stages.bias.matched_patterns      # ["proxy_language", ...]
+audit.stages.explanation.caveats        # ["Limited context provided", ...]
+audit.stages.trust.score_breakdown      # {"bias": 38.0, "explanation": 28.5, ...}
+audit.stages.trust.risk_level           # "low" | "medium" | "high" | "critical"`;
+
+const webhookPayloadSample = String.raw`# Webhook POST payload (sent automatically on low trust)
+{
+  "event": "verdant.audit.low_trust",
+  "timestamp": "2026-07-08T22:30:00+00:00",
+  "audit": {
+    "audit_id": "550e8400-e29b-41d4-a716-446655440000",
+    "context_type": "hiring",
+    "trust_score": 28,
+    "flags": ["proxy_language_detected", "demographic_bias"],
+    "explanation": "The output uses language proxies...",
+    "stages": { ... }
+  }
+}
+
+# Headers included with every webhook
+# X-Verdant-Event: verdant.audit.low_trust
+# X-Verdant-Timestamp: 2026-07-08T22:30:00+00:00
+# X-Verdant-Audit-Id: 550e8400-...
+# X-Verdant-Signature: sha256=abc123...  (HMAC-SHA256)`;
+
+const apiCurlSample = String.raw`# Run pipeline via REST API
+curl -X POST http://localhost:8000/pipeline/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input_text": "Evaluate this candidate",
+    "context_type": "hiring",
+    "metadata": {}
+  }'
+
+# Fetch audit logs
+curl http://localhost:8000/audits?limit=10&context_type=hiring
+
+# Get a specific audit
+curl http://localhost:8000/audits/550e8400-e29b-41d4-a716-446655440000
+
+# Generate NDPR compliance report
+curl http://localhost:8000/reports/ndpr?days=30
+
+# Manually dispatch webhooks for an audit
+curl -X POST "http://localhost:8000/webhooks/dispatch?audit_id=550e8400-...&force=true"`;
+
 const envVars = `# Required
 VERDANT_API_KEY=vd_live_...
 ANTHROPIC_API_KEY=sk-ant-...
@@ -52,12 +193,49 @@ config = VerdantConfig(
 
 client = VerdantClient(api_key="vd_live_...", config=config)`;
 
+const contextTypes = [
+  { type: "hiring", desc: "Recruitment, candidate evaluation, job screening.", aliases: "—" },
+  { type: "lending", desc: "Loan applications, credit scoring, financial assessment.", aliases: "—" },
+  { type: "content", desc: "Content moderation, text review, publishing decisions.", aliases: "content_moderation, moderation" },
+  { type: "healthcare", desc: "Patient triage, diagnosis support, treatment recommendations.", aliases: "—" },
+];
+
+const auditFields = [
+  { field: "request_id", type: "UUID", desc: "Unique identifier for this pipeline run." },
+  { field: "created_at", type: "datetime", desc: "UTC timestamp of when the pipeline executed." },
+  { field: "context_type", type: "str", desc: "The active context: hiring, lending, content, or healthcare." },
+  { field: "input_text", type: "str", desc: "The input text passed to the pipeline." },
+  { field: "output_text", type: "str", desc: "Stringified version of the AI output." },
+  { field: "stages", type: "object", desc: "Full per-stage structured outputs (intent, baseline, bias, explanation, trust)." },
+  { field: "trust_score", type: "int", desc: "The composite 0–100 trust score." },
+  { field: "flags", type: "list[str]", desc: "All bias flags triggered during the pipeline." },
+  { field: "explanation", type: "str", desc: "Plain-language explanation string." },
+  { field: "model_name", type: "str", desc: "AI model used (default: claude-sonnet-4-6)." },
+  { field: "duration_ms", type: "int", desc: "Pipeline execution time in milliseconds." },
+  { field: "error", type: "str | null", desc: "Error message if the wrapped function failed, null otherwise." },
+];
+
+const apiEndpoints = [
+  { method: "POST", path: "/pipeline/run", desc: "Execute the 5-stage reasoning pipeline on an input. Returns full audit payload with trust score, flags, and explanation." },
+  { method: "GET", path: "/audits", desc: "List audit logs with pagination. Supports filtering by context_type. Query params: limit, offset, context_type." },
+  { method: "GET", path: "/audits/{audit_id}", desc: "Retrieve a single audit record by ID. Returns the full stage breakdown and metadata." },
+  { method: "GET", path: "/reports/ndpr", desc: "Generate an NDPR compliance report. Aggregates trust scores, flag counts, and context breakdown. Query param: days (default 30)." },
+  { method: "POST", path: "/webhooks/dispatch", desc: "Manually dispatch webhook alerts for a specific audit. Query params: audit_id, force (bypass threshold check)." },
+];
+
 const tocItems = [
   { href: "#overview", label: "Overview" },
   { href: "#installation", label: "Installation" },
   { href: "#quickstart", label: "Quick start" },
   { href: "#result-object", label: "Result object" },
+  { href: "#context-types", label: "Context types" },
   { href: "#pipeline-stages", label: "Pipeline stages" },
+  { href: "#audit-payload", label: "Audit payload" },
+  { href: "#wrapping-non-ai", label: "Wrapping non-AI functions" },
+  { href: "#wrapping-values", label: "Wrapping existing values" },
+  { href: "#error-handling", label: "Error handling" },
+  { href: "#api-reference", label: "REST API reference" },
+  { href: "#webhooks", label: "Webhooks" },
   { href: "#env-vars", label: "Environment variables" },
   { href: "#configuration", label: "Configuration" },
 ];
@@ -325,6 +503,78 @@ export default function DocsPage() {
                 </div>
               </section>
 
+              {/* ── Context types ── */}
+              <section id="context-types">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                  Context types
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+                  VERDANT uses context types to load the correct Nigerian
+                  demographic baseline for each decision. Pass{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    context_type
+                  </code>{" "}
+                  when wrapping a call. If omitted, the pipeline infers it from
+                  the input text.
+                </p>
+                <div className="mt-6 overflow-hidden rounded-lg border border-rose-950/10 dark:border-white/10">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-rose-950/10 bg-slate-50 dark:border-white/10 dark:bg-white/5">
+                      <tr>
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Type
+                        </th>
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Use case
+                        </th>
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Aliases
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-rose-950/5 dark:divide-white/5">
+                      {contextTypes.map(({ type, desc, aliases }) => (
+                        <tr key={type} className="bg-white dark:bg-transparent">
+                          <td className="px-5 py-3.5 font-mono text-xs font-semibold text-rose-700 dark:text-rose-400">
+                            {type}
+                          </td>
+                          <td className="px-5 py-3.5 text-slate-600 dark:text-slate-300">
+                            {desc}
+                          </td>
+                          <td className="px-5 py-3.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+                            {aliases}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 px-6 py-5 dark:border-sky-500/20 dark:bg-sky-500/10">
+                  <p className="font-semibold text-sky-800 dark:text-sky-300">
+                    Alias resolution
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-sky-700/80 dark:text-sky-300/70">
+                    You can pass aliases like{" "}
+                    <code className="rounded bg-sky-100 px-1.5 py-0.5 text-xs dark:bg-sky-500/20">
+                      content_moderation
+                    </code>{" "}
+                    or{" "}
+                    <code className="rounded bg-sky-100 px-1.5 py-0.5 text-xs dark:bg-sky-500/20">
+                      moderation
+                    </code>{" "}
+                    and they&apos;ll resolve to{" "}
+                    <code className="rounded bg-sky-100 px-1.5 py-0.5 text-xs dark:bg-sky-500/20">
+                      content
+                    </code>
+                    . Unsupported values raise a{" "}
+                    <code className="rounded bg-sky-100 px-1.5 py-0.5 text-xs dark:bg-sky-500/20">
+                      ValueError
+                    </code>
+                    .
+                  </p>
+                </div>
+              </section>
+
               {/* ── Pipeline stages ── */}
               <section id="pipeline-stages">
                 <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
@@ -344,6 +594,356 @@ export default function DocsPage() {
                     >
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-700 text-sm font-bold text-white">
                         {n}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-900 dark:text-white">
+                          {title}
+                        </p>
+                        <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                          {body}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── Audit payload ── */}
+              <section id="audit-payload">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                  Audit payload
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+                  Every pipeline run produces an{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    AuditPayload
+                  </code>{" "}
+                  accessible via{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    result.audit
+                  </code>
+                  . This is the full reasoning chain that gets persisted to
+                  Supabase and powers the dashboard.
+                </p>
+                <div className="mt-6 overflow-hidden rounded-lg border border-rose-950/10 dark:border-white/10">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-rose-950/10 bg-slate-50 dark:border-white/10 dark:bg-white/5">
+                      <tr>
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Field
+                        </th>
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Type
+                        </th>
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Description
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-rose-950/5 dark:divide-white/5">
+                      {auditFields.map(({ field, type, desc }) => (
+                        <tr key={field} className="bg-white dark:bg-transparent">
+                          <td className="px-5 py-3.5 font-mono text-xs font-semibold text-rose-700 dark:text-rose-400">
+                            {field}
+                          </td>
+                          <td className="px-5 py-3.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+                            {type}
+                          </td>
+                          <td className="px-5 py-3.5 text-slate-600 dark:text-slate-300">
+                            {desc}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
+                  <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-400">
+                      Python
+                    </span>
+                    <span className="font-mono text-xs text-slate-500">
+                      audit_fields.py
+                    </span>
+                  </div>
+                  <pre className="overflow-x-auto p-5 text-sm leading-7 text-slate-100">
+                    <code>{auditBreakdownSample}</code>
+                  </pre>
+                </div>
+                <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 px-6 py-5 dark:border-violet-500/20 dark:bg-violet-500/10">
+                  <p className="font-semibold text-violet-800 dark:text-violet-300">
+                    Trust score breakdown
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-violet-700/80 dark:text-violet-300/70">
+                    Access{" "}
+                    <code className="rounded bg-violet-100 px-1.5 py-0.5 text-xs dark:bg-violet-500/20">
+                      audit.stages.trust.score_breakdown
+                    </code>{" "}
+                    to see the per-signal scores. The trust score is a weighted
+                    composite: bias signal strength (40%), explanation confidence
+                    (30%), intent alignment (20%), and historical pattern
+                    consistency (10%).
+                  </p>
+                </div>
+              </section>
+
+              {/* ── Wrapping non-AI functions ── */}
+              <section id="wrapping-non-ai">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                  Wrapping non-AI functions
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+                  VERDANT doesn&apos;t care how the output was generated. You can
+                  wrap legacy rules engines, deterministic scoring functions, or
+                  any callable that makes a high-stakes decision. The pipeline
+                  evaluates the relationship between input and output —
+                  not the source.
+                </p>
+                <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
+                  <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-400">
+                      Python
+                    </span>
+                    <span className="font-mono text-xs text-slate-500">
+                      non_ai_example.py
+                    </span>
+                  </div>
+                  <pre className="overflow-x-auto p-5 text-sm leading-7 text-slate-100">
+                    <code>{nonAiSample}</code>
+                  </pre>
+                </div>
+                <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-6 py-5 dark:border-amber-500/20 dark:bg-amber-500/10">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300">
+                    Why wrap non-AI logic?
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-amber-700/80 dark:text-amber-300/70">
+                    Many high-stakes systems in Nigerian fintech, HR-tech, and
+                    health-tech still use deterministic rules or heuristics. These
+                    can encode demographic bias just like an LLM can. VERDANT
+                    gives you the same inspectability, audit trail, and NDPR
+                    compliance for any decision-making function.
+                  </p>
+                </div>
+              </section>
+
+              {/* ── Wrapping existing values ── */}
+              <section id="wrapping-values">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                  Wrapping existing values
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+                  If you already have the AI output as a string or object and
+                  just want VERDANT to audit it, wrap it in a lambda or a simple
+                  function. Don&apos;t pass a raw value directly to{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    fn
+                  </code>
+                  {" "}— it expects a callable.
+                </p>
+                <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
+                  <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-400">
+                      Python
+                    </span>
+                    <span className="font-mono text-xs text-slate-500">
+                      wrap_existing_value.py
+                    </span>
+                  </div>
+                  <pre className="overflow-x-auto p-5 text-sm leading-7 text-slate-100">
+                    <code>{rawValueSample}</code>
+                  </pre>
+                </div>
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+                    <p className="flex items-center gap-2 font-semibold text-emerald-800 dark:text-emerald-300">
+                      <CheckIcon className="h-4 w-4" aria-hidden="true" />
+                      Do this
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-emerald-700/80 dark:text-emerald-300/70">
+                      <code className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs dark:bg-emerald-500/20">
+                        fn=lambda **kwargs: my_value
+                      </code>
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4 dark:border-red-500/20 dark:bg-red-500/10">
+                    <p className="flex items-center gap-2 font-semibold text-red-800 dark:text-red-300">
+                      <ShieldIcon className="h-4 w-4" aria-hidden="true" />
+                      Don&apos;t do this
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-red-700/80 dark:text-red-300/70">
+                      <code className="rounded bg-red-100 px-1.5 py-0.5 text-xs dark:bg-red-500/20">
+                        fn=my_value
+                      </code>{" "}
+                      — crashes with{" "}
+                      <code className="rounded bg-red-100 px-1.5 py-0.5 text-xs dark:bg-red-500/20">
+                        TypeError
+                      </code>
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              {/* ── Error handling ── */}
+              <section id="error-handling">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                  Error handling
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+                  If the wrapped function throws an exception, VERDANT catches it
+                  gracefully. Your application stays up. The pipeline still runs
+                  and records a full audit — but the trust score is capped and
+                  the risk level is set to critical.
+                </p>
+                <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
+                  <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-400">
+                      Python
+                    </span>
+                    <span className="font-mono text-xs text-slate-500">
+                      error_handling.py
+                    </span>
+                  </div>
+                  <pre className="overflow-x-auto p-5 text-sm leading-7 text-slate-100">
+                    <code>{errorHandlingSample}</code>
+                  </pre>
+                </div>
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  {[
+                    { label: "Trust score", value: "≤ 15", note: "Capped to critical threshold" },
+                    { label: "Risk level", value: "critical", note: "Always set on failure" },
+                    { label: "Output", value: "Empty string", note: "No upstream data available" },
+                  ].map(({ label, value, note }) => (
+                    <div
+                      key={label}
+                      className="rounded-lg border border-rose-950/10 bg-white p-4 dark:border-white/10 dark:bg-white/5"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        {label}
+                      </p>
+                      <p className="mt-1 font-display text-xl font-semibold text-rose-700 dark:text-rose-400">
+                        {value}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        {note}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── REST API reference ── */}
+              <section id="api-reference">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                  REST API reference
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+                  If you&apos;re integrating via HTTP instead of the Python SDK,
+                  the FastAPI backend exposes these endpoints. All responses use a
+                  consistent envelope:{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    {"{ data, meta, error }"}
+                  </code>
+                </p>
+                <div className="mt-6 overflow-hidden rounded-lg border border-rose-950/10 dark:border-white/10">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-rose-950/10 bg-slate-50 dark:border-white/10 dark:bg-white/5">
+                      <tr>
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Method
+                        </th>
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Endpoint
+                        </th>
+                        <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                          Description
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-rose-950/5 dark:divide-white/5">
+                      {apiEndpoints.map(({ method, path, desc }) => (
+                        <tr key={path} className="bg-white dark:bg-transparent">
+                          <td className="px-5 py-3.5">
+                            <span
+                              className={`inline-flex rounded px-2 py-0.5 text-xs font-bold ${
+                                method === "POST"
+                                  ? "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+                                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                              }`}
+                            >
+                              {method}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 font-mono text-xs font-semibold text-rose-700 dark:text-rose-400">
+                            {path}
+                          </td>
+                          <td className="px-5 py-3.5 text-slate-600 dark:text-slate-300">
+                            {desc}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
+                  <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-400">
+                      cURL
+                    </span>
+                    <span className="font-mono text-xs text-slate-500">
+                      examples
+                    </span>
+                  </div>
+                  <pre className="overflow-x-auto p-5 text-sm leading-7 text-slate-100">
+                    <code>{apiCurlSample}</code>
+                  </pre>
+                </div>
+              </section>
+
+              {/* ── Webhooks ── */}
+              <section id="webhooks">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                  Webhooks
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+                  When a pipeline result falls below your configured trust score
+                  threshold (default: 40), VERDANT automatically dispatches a
+                  signed webhook POST to all active endpoints. Each webhook is
+                  HMAC-SHA256 signed so you can verify authenticity.
+                </p>
+                <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
+                  <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-400">
+                      JSON
+                    </span>
+                    <span className="font-mono text-xs text-slate-500">
+                      webhook_payload.json
+                    </span>
+                  </div>
+                  <pre className="overflow-x-auto p-5 text-sm leading-7 text-slate-100">
+                    <code>{webhookPayloadSample}</code>
+                  </pre>
+                </div>
+                <div className="mt-6 space-y-3">
+                  {[
+                    {
+                      title: "HMAC-SHA256 signing",
+                      body: "Every webhook payload is signed with your WEBHOOK_SECRET. Verify the X-Verdant-Signature header to confirm the request came from VERDANT.",
+                    },
+                    {
+                      title: "Per-webhook thresholds",
+                      body: "Each webhook endpoint can have its own min_trust_score threshold. A webhook with threshold 60 will fire more often than one set to 20.",
+                    },
+                    {
+                      title: "Manual dispatch",
+                      body: "Use POST /webhooks/dispatch?audit_id=...&force=true to re-send webhooks for any audit, even if the trust score is above threshold.",
+                    },
+                  ].map(({ title, body }) => (
+                    <div
+                      key={title}
+                      className="flex gap-4 rounded-lg border border-rose-950/10 bg-white p-5 dark:border-white/10 dark:bg-white/5"
+                    >
+                      <div className="mt-0.5">
+                        <PulseIcon className="h-5 w-5 text-rose-700 dark:text-rose-400" aria-hidden="true" />
                       </div>
                       <div>
                         <p className="font-semibold text-slate-900 dark:text-white">

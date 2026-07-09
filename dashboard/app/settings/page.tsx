@@ -1,4 +1,6 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { ProviderKeysForm } from "@/components/provider-keys-form";
+import { signOut } from "@/app/auth/actions";
 
 export default function SettingsPage() {
   return (
@@ -96,46 +98,25 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Model versioning */}
+          {/* Provider Keys */}
+          <ProviderKeysForm />
+
+          {/* Account */}
           <section className="rounded-lg border border-rose-950/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/5">
             <h2 className="font-display text-xl font-semibold text-slate-950 dark:text-white">
-              Model versioning
+              Account
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Active AI models used in the pipeline for reasoning and
-              explanation generation.
+              Sign out of your VERDANT account on this device.
             </p>
-            <div className="mt-4 space-y-2">
-              {[
-                {
-                  role: "Primary (explanation gen)",
-                  model: "claude-sonnet-4-6",
-                  active: true,
-                },
-                {
-                  role: "Fallback / cross-validation",
-                  model: "gemini-2.0-flash",
-                  active: true,
-                },
-              ].map(({ role, model, active }) => (
-                <div
-                  key={role}
-                  className="flex items-start justify-between gap-3 rounded-lg border border-rose-950/10 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-white/5"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs text-slate-400">{role}</p>
-                    <p className="mt-0.5 font-mono text-sm font-medium text-slate-800 dark:text-slate-200">
-                      {model}
-                    </p>
-                  </div>
-                  {active && (
-                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
-                      active
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
+            <form action={signOut} className="mt-4">
+              <button
+                type="submit"
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-rose-950/10 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors duration-300 hover:border-rose-400 hover:text-rose-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:text-white"
+              >
+                Log out
+              </button>
+            </form>
           </section>
         </div>
       </div>

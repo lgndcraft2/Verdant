@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 import {
   ArrowIcon,
   CheckIcon,
@@ -78,7 +79,11 @@ print(result.trust_score)   # 0–100
 print(result.flags)         # ["proxy_language_detected"]
 print(result.explanation)   # Plain-language rationale`;
 
-export default function Home() {
+export default async function Home() {
+  const supabase = createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  const isSignedIn = !!session;
+
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[#fdfcfc] text-slate-950 dark:bg-[#100a0b] dark:text-slate-50">
       {/* Background decoration */}
@@ -121,10 +126,10 @@ export default function Home() {
 
           <div className="flex items-center gap-3">
             <Link
-              href="/overview"
+              href={isSignedIn ? "/overview" : "/login"}
               className="hidden min-h-11 items-center rounded-lg border border-rose-950/10 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors duration-300 hover:border-rose-500 hover:text-rose-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:text-white sm:inline-flex"
             >
-              Dashboard
+              {isSignedIn ? "Dashboard" : "Get started"}
             </Link>
             <Link
               href="/docs"
@@ -172,10 +177,10 @@ export default function Home() {
                 <ArrowIcon className="h-4 w-4" aria-hidden="true" />
               </Link>
               <Link
-                href="/overview"
+                href={isSignedIn ? "/overview" : "/login"}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-rose-950/10 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors duration-300 hover:border-rose-400 hover:text-rose-800 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:text-white"
               >
-                View dashboard
+                {isSignedIn ? "View dashboard" : "Get started"}
               </Link>
             </div>
 
@@ -496,10 +501,10 @@ export default function Home() {
                   <ArrowIcon className="h-4 w-4" aria-hidden="true" />
                 </Link>
                 <Link
-                  href="/overview"
+                  href={isSignedIn ? "/overview" : "/login"}
                   className="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition-colors duration-300 hover:bg-white/[0.15]"
                 >
-                  View dashboard
+                  {isSignedIn ? "View dashboard" : "Get started"}
                 </Link>
               </div>
             </div>
@@ -590,8 +595,8 @@ export default function Home() {
                 </Link>
               </li>
               <li>
-                <Link className="transition-colors hover:text-rose-800 dark:hover:text-rose-300" href="/overview">
-                  Dashboard
+                <Link className="transition-colors hover:text-rose-800 dark:hover:text-rose-300" href={isSignedIn ? "/overview" : "/login"}>
+                  {isSignedIn ? "Dashboard" : "Get started"}
                 </Link>
               </li>
               <li>

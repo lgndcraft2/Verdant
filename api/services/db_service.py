@@ -39,6 +39,7 @@ class DBService:
             "fairness_baselines": [],
             "webhook_configs": [],
             "api_keys": [],
+            "provider_keys": {},
         }
 
     def _build_client(self) -> Any:
@@ -240,3 +241,65 @@ class DBService:
                 if row.get("key_prefix") == key_prefix:
                     return deepcopy(row)
             return None
+
+    async def get_provider_key(self, provider: str) -> str | None:
+        """Fetch an LLM provider API key (e.g. 'anthropic', 'gemini') from DB."""
+        if self._supabase is None:
+            key = self._memory["provider_keys"].get(provider, "")
+            return key if key else None
+
+        def _run() -> str | None:
+            result = (
+                self._supabase.table("provider_keys")
+                .select("api_key")
+                .eq("provider", provider)
+                .limit(1)
+                .execute()
+            )
+            data = getattr(result, "data", None) or []
+            if data and data[0].get("api_key"):
+                return data[0]["api_key"]
+            return None
+
+        try:
+            return await asyncio.to_thread(_run)
+        except Exception as exc:
+            logger.warning("Supabase provider key fetch failed: %s", exc)
+            return None
+
+    async def set_provider_key(self, provider: str, api_key: str) -> None:
+        """Upsert an LLM provider API key."""
+        if self._supabase is None:
+            self._memory["provider_keys"][provider] = api_key
+            return
+
+        def _run() -> None:
+            self._supabase.table("provider_keys").upsert(
+                {"provider": provider, "api_key": api_key, "updated_at": datetime.now(timezone.utc).isoformat()},
+                on_conflict="provider",
+            ).execute()
+
+        try:
+            await asyncio.to_thread(_run)
+        except Exception as exc:
+            logger.warning("Supabase provider key upsert failed, storing in memory: %s", exc)
+            self._memory["provider_keys"][provider] = api_key
+
+    async def get_all_provider_keys_status(self) -> dict[str, bool]:
+        """Return a dict of provider -> bool indicating if a key is configured."""
+        if self._supabase is None:
+            return {
+                provider: bool(key)
+                for provider, key in self._memory["provider_keys"].items()
+            }
+
+        def _run() -> dict[str, bool]:
+            result = self._supabase.table("provider_keys").select("provider, api_key").execute()
+            data = getattr(result, "data", None) or []
+            return {row["provider"]: bool(row.get("api_key")) for row in data}
+
+        try:
+            return await asyncio.to_thread(_run)
+        except Exception as exc:
+            logger.warning("Supabase provider keys status fetch failed: %s", exc)
+            return {}

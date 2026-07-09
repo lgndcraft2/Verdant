@@ -14,6 +14,11 @@ from sdk.verdant.config import Settings, get_settings
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
+# Avoid circular import — type-check only
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from api.services.db_service import DBService
+
 
 class _GeneratedCompletion(BaseModel):
     output: str
@@ -23,9 +28,10 @@ class _GeneratedCompletion(BaseModel):
 class ClaudeService:
     model_name = "claude-sonnet-4-6"
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None, *, db_service: "DBService | None" = None) -> None:
         self.settings = settings or get_settings()
         self._client = None
+        self._db_service = db_service
         self._prompts_dir = Path(__file__).resolve().parent / "prompts"
 
         if self.settings.anthropic_api_key:
@@ -35,6 +41,21 @@ class ClaudeService:
                 self._client = AsyncAnthropic(api_key=self.settings.anthropic_api_key)
             except Exception as exc:  # pragma: no cover - import/runtime guard
                 logger.warning("Anthropic client unavailable: %s", exc)
+
+    async def _ensure_client(self) -> None:
+        """Lazily configure the Anthropic client from DB-stored keys if not already set."""
+        if self._client is not None:
+            return
+        if self._db_service is None:
+            return
+        try:
+            key = await self._db_service.get_provider_key("anthropic")
+            if key:
+                from anthropic import AsyncAnthropic
+                self._client = AsyncAnthropic(api_key=key)
+                logger.info("Anthropic client initialized from DB-stored provider key.")
+        except Exception as exc:
+            logger.warning("Failed to initialize Anthropic client from DB key: %s", exc)
 
     def _load_prompt(self, prompt_name: str) -> str:
         prompt_path = self._prompts_dir / f"{prompt_name}.txt"
@@ -95,8 +116,9 @@ class ClaudeService:
         return payload
 
     async def _invoke(self, system_prompt: str, user_prompt: str, temperature: float = 0.0) -> str:
+        await self._ensure_client()
         if self._client is None:
-            raise RuntimeError("Anthropic client is not configured")
+            raise RuntimeError("Anthropic client is not configured. Set ANTHROPIC_API_KEY or add it via the Dashboard.")
 
         response = await self._client.messages.create(
             model=self.model_name,

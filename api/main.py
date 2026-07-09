@@ -4,14 +4,16 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from api.auth import verify_api_key
 from api.config import get_settings
 from api.routers.audit import router as audit_router
 from api.routers.pipeline import router as pipeline_router
+from api.routers.providers import router as providers_router
 from api.routers.reports import router as reports_router
 from api.routers.webhooks import router as webhooks_router
 from api.services.cache_service import CacheService
@@ -32,8 +34,8 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     cache = CacheService(settings)
     db = DBService(settings)
-    claude = ClaudeService(settings)
-    gemini = GeminiService(settings)
+    claude = ClaudeService(settings, db_service=db)
+    gemini = GeminiService(settings, db_service=db)
     pipeline = VerdantPipeline(
         settings,
         claude_service=claude,
@@ -107,7 +109,8 @@ async def generic_exception_handler(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
-app.include_router(pipeline_router)
-app.include_router(audit_router)
-app.include_router(webhooks_router)
-app.include_router(reports_router)
+app.include_router(pipeline_router, dependencies=[Depends(verify_api_key)])
+app.include_router(audit_router, dependencies=[Depends(verify_api_key)])
+app.include_router(webhooks_router, dependencies=[Depends(verify_api_key)])
+app.include_router(reports_router, dependencies=[Depends(verify_api_key)])
+app.include_router(providers_router)

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Lexend, Source_Sans_3 } from "next/font/google";
+import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
 const display = Lexend({
@@ -30,6 +31,7 @@ export default function RootLayout({
     <html lang="en" className={`${display.variable} ${body.variable} scroll-smooth`}>
       <body className="bg-slate-50 font-body text-slate-950 antialiased dark:bg-slate-950 dark:text-slate-50">
         {children}
+        <Toaster position="bottom-center" />
       </body>
     </html>
   );

@@ -14,11 +14,16 @@ from sdk.verdant.config import Settings, get_settings
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from api.services.db_service import DBService
+
 
 class GeminiService:
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None, *, db_service: "DBService | None" = None) -> None:
         self.settings = settings or get_settings()
         self._client = None
+        self._db_service = db_service
         self._prompts_dir = Path(__file__).resolve().parent / "prompts"
 
         if self.settings.gemini_api_key:
@@ -29,6 +34,22 @@ class GeminiService:
                 self._client = genai
             except Exception as exc:  # pragma: no cover - import/runtime guard
                 logger.warning("Gemini client unavailable: %s", exc)
+
+    async def _ensure_client(self) -> None:
+        """Lazily configure the Gemini client from DB-stored keys if not already set."""
+        if self._client is not None:
+            return
+        if self._db_service is None:
+            return
+        try:
+            key = await self._db_service.get_provider_key("gemini")
+            if key:
+                import google.generativeai as genai
+                genai.configure(api_key=key)
+                self._client = genai
+                logger.info("Gemini client initialized from DB-stored provider key.")
+        except Exception as exc:
+            logger.warning("Failed to initialize Gemini client from DB key: %s", exc)
 
     def _load_prompt(self, prompt_name: str) -> str:
         prompt_path = self._prompts_dir / f"{prompt_name}.txt"
@@ -54,8 +75,9 @@ class GeminiService:
         return payload
 
     async def _invoke(self, system_prompt: str, user_prompt: str, temperature: float = 0.0) -> str:
+        await self._ensure_client()
         if self._client is None:
-            raise RuntimeError("Gemini client is not configured")
+            raise RuntimeError("Gemini client is not configured. Set GEMINI_API_KEY or add it via the Dashboard.")
 
         def _run() -> str:
             model = self._client.GenerativeModel(

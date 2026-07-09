@@ -27,7 +27,7 @@ class Settings(BaseModel):
     trust_score_alert_threshold: int = Field(default=40, ge=0, le=100)
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
     claude_model: str = "claude-sonnet-4-6"
-    gemini_model: str = "gemini-1.5-flash"
+    gemini_model: str = "gemini-2.5-flash"
     request_timeout_seconds: float = 30.0
     webhook_timeout_seconds: float = 10.0
 
@@ -46,7 +46,7 @@ class Settings(BaseModel):
             trust_score_alert_threshold=int(os.getenv("TRUST_SCORE_ALERT_THRESHOLD", "40")),
             cors_origins=_split_csv(os.getenv("CORS_ORIGINS"), ["*"]),
             claude_model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
-            gemini_model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
             request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS", "30")),
             webhook_timeout_seconds=float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10")),
         )
