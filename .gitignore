@@ -14,3 +14,4 @@ dashboard/.dev.stderr.log
 /dashboard/.env.local
 /.venv
 /tests/__pycache__/
+/.venv-testpypi
