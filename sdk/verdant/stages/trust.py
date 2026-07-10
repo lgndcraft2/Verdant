@@ -3,8 +3,6 @@ from __future__ import annotations
 import statistics
 from typing import Any
 
-from api.services.db_service import DBService
-
 from ..config import Settings, get_settings
 from ..models import (
     BaselineStageOutput,
@@ -16,6 +14,7 @@ from ..models import (
     RiskLevel,
     TrustStageOutput,
 )
+from ..services.db_service import DBService
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:

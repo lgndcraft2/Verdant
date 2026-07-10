@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sdk.verdant.config import Settings, get_settings
-from sdk.verdant.models import AuditPayload, ContextType
+from ..config import Settings, get_settings
+from ..models import AuditPayload, ContextType
 
 logger = logging.getLogger(__name__)
 

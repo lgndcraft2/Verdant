@@ -3,8 +3,8 @@ from fastapi.testclient import TestClient
 
 from api.auth import verify_supabase_jwt
 from api.main import app
-from api.services.db_service import DBService
 from sdk.verdant.config import Settings
+from sdk.verdant.services.db_service import DBService
 
 FAKE_USER = {"user_id": "user-123", "email": "tester@example.com"}
 

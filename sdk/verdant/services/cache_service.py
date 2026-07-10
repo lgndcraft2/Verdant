@@ -7,8 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from sdk.verdant.config import Settings, get_settings
-from sdk.verdant.models import ContextType
+from ..config import Settings, get_settings
+from ..models import ContextType
 
 logger = logging.getLogger(__name__)
 

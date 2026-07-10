@@ -17,10 +17,10 @@ from api.routers.pipeline import router as pipeline_router
 from api.routers.providers import router as providers_router
 from api.routers.reports import router as reports_router
 from api.routers.webhooks import router as webhooks_router
-from api.services.cache_service import CacheService
-from api.services.claude_service import ClaudeService
-from api.services.db_service import DBService
-from api.services.gemini_service import GeminiService
+from sdk.verdant.services.cache_service import CacheService
+from sdk.verdant.services.claude_service import ClaudeService
+from sdk.verdant.services.db_service import DBService
+from sdk.verdant.services.gemini_service import GeminiService
 from sdk.verdant.pipeline import VerdantPipeline
 
 logger = logging.getLogger(__name__)

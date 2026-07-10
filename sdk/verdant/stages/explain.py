@@ -3,11 +3,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from api.services.claude_service import ClaudeService
-from api.services.gemini_service import GeminiService
-
 from ..config import Settings, get_settings
 from ..models import BaselineStageOutput, BiasStageOutput, ContextType, ExplainStageOutput, IntentStageOutput
+from ..services.claude_service import ClaudeService
+from ..services.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)
 

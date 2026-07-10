@@ -9,14 +9,14 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
-from sdk.verdant.config import Settings, get_settings
+from ..config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from api.services.db_service import DBService
+    from .db_service import DBService
 
 
 class GeminiService:

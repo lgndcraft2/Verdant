@@ -7,11 +7,6 @@ import logging
 import time
 from typing import Any, Callable
 
-from api.services.cache_service import CacheService
-from api.services.claude_service import ClaudeService
-from api.services.db_service import DBService
-from api.services.gemini_service import GeminiService
-
 from .config import Settings, get_settings
 from .models import (
     AuditPayload,
@@ -25,6 +20,10 @@ from .models import (
     TrustStageOutput,
     WrapResult,
 )
+from .services.cache_service import CacheService
+from .services.claude_service import ClaudeService
+from .services.db_service import DBService
+from .services.gemini_service import GeminiService
 from .stages.baseline import load_baseline
 from .stages.bias import match_bias_patterns
 from .stages.explain import generate_explanation
