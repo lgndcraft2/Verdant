@@ -1,4 +1,5 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { ApiKeysForm } from "@/components/api-keys-form";
 import { ProviderKeysForm } from "@/components/provider-keys-form";
 import { signOut } from "@/app/auth/actions";
 
@@ -18,26 +19,7 @@ export default function SettingsPage() {
 
         <div className="grid gap-5 md:grid-cols-2">
           {/* API Keys */}
-          <section className="rounded-lg border border-rose-950/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/5">
-            <h2 className="font-display text-xl font-semibold text-slate-950 dark:text-white">
-              API keys
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Your VERDANT API key grants full access to your pipeline and audit
-              logs. Keep it secret.
-            </p>
-            <div className="mt-4 flex items-center gap-3 rounded-lg border border-rose-950/10 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-white/5">
-              <code className="flex-1 truncate font-mono text-sm text-slate-600 dark:text-slate-300">
-                vd_live_••••••••••••••••••••
-              </code>
-              <button className="shrink-0 text-xs font-semibold text-rose-700 transition-colors hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300">
-                Reveal
-              </button>
-            </div>
-            <button className="mt-3 text-xs font-medium text-slate-500 transition-colors hover:text-rose-700 dark:hover:text-rose-400">
-              Regenerate key →
-            </button>
-          </section>
+          <ApiKeysForm />
 
           {/* Webhook thresholds */}
           <section className="rounded-lg border border-rose-950/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/5">

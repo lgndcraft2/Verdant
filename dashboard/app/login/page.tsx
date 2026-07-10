@@ -1,22 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const [view, setView] = useState<'login' | 'signup'>('login')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+  // Memoize so we don't spin up a new GoTrueClient on every keystroke re-render.
+  const supabase = useMemo(() => createClient(), [])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !password) {
       toast.error('Email and password are required')
+      return
+    }
+    if (view === 'signup' && !name.trim()) {
+      toast.error('Please enter your name')
       return
     }
 
@@ -29,13 +35,20 @@ export default function LoginPage() {
         if (error) throw error
         toast.success('Welcome back!', { id: toastId })
         router.refresh()
-        router.push('/')
+        router.push('/overview')
       } else {
-        const { error } = await supabase.auth.signUp({ email, password })
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            // Stored on user_metadata; surfaced across the dashboard.
+            data: { full_name: name.trim() },
+          },
+        })
         if (error) throw error
         toast.success('Account created! Welcome to VERDANT.', { id: toastId })
         router.refresh()
-        router.push('/')
+        router.push('/overview')
       }
     } catch (error: any) {
       toast.error(error.message || 'Authentication failed', { id: toastId })
@@ -81,6 +94,26 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleAuth} className="flex flex-col gap-4">
+          {view === 'signup' && (
+            <div>
+              <label
+                htmlFor="name"
+                className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
+              >
+                Full name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ada Lovelace"
+                className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500 dark:border-white/10 dark:bg-white/5 dark:text-white"
+              />
+            </div>
+          )}
           <div>
             <label
               htmlFor="email"

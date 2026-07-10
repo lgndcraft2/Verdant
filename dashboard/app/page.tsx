@@ -81,8 +81,10 @@ print(result.explanation)   # Plain-language rationale`;
 
 export default async function Home() {
   const supabase = createClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  const isSignedIn = !!session;
+  // getUser() revalidates the token against the Auth server; getSession() only
+  // reads the cookie and is not safe to trust server-side.
+  const { data: { user } } = await supabase.auth.getUser();
+  const isSignedIn = !!user;
 
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[#fdfcfc] text-slate-950 dark:bg-[#100a0b] dark:text-slate-50">

@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
+from api.auth import verify_api_key
 from api.main import app
 from sdk.verdant.config import Settings
 
@@ -37,6 +38,9 @@ def mock_pipeline(mocker):
 
 @pytest.fixture
 def client(mock_settings, mock_db, mock_cache, mock_pipeline):
+    # Bypass VERDANT API-key auth so these tests can exercise handler logic.
+    # Only affects the TestClient; production auth is unchanged.
+    app.dependency_overrides[verify_api_key] = lambda: {"active": True, "key_prefix": "vd_test"}
     with TestClient(app) as test_client:
         # Override dependencies in app.state AFTER lifespan runs
         app.state.settings = mock_settings
@@ -44,3 +48,4 @@ def client(mock_settings, mock_db, mock_cache, mock_pipeline):
         app.state.cache = mock_cache
         app.state.pipeline = mock_pipeline
         yield test_client
+    app.dependency_overrides.clear()

@@ -70,7 +70,15 @@ The dashboard will be available at [http://localhost:3000](http://localhost:3000
 
 ---
 
-## Your First Wrap
+## Get Your API Key
+
+Sign in to the dashboard, open **Settings → API keys**, and click **Generate key**. Copy the
+`vd_live_...` key immediately — it's shown only once (only a hash is stored). Lost it? Use
+**Regenerate key**, which revokes the old one and issues a new one.
+
+## Your First Wrap (local, in-process)
+
+Runs the pipeline in your own process using your provider keys from `.env`:
 
 ```python
 from verdant import VerdantClient
@@ -90,13 +98,29 @@ print(result.flags)         # Bias/risk flags
 print(result.explanation)   # Plain-language explanation
 ```
 
-### Without a Wrapped Function
+## Hosted Mode (SaaS)
 
-You can also run the pipeline directly via the API — useful for testing:
+Set `VERDANT_API_URL` (or pass `base_url`) and the SDK runs the pipeline on the hosted API —
+provider keys stay server-side (managed in the dashboard), so you only need your VERDANT key:
+
+```python
+client = VerdantClient(api_key="vd_live_...", base_url="http://localhost:8000")
+
+result = await client.run(
+    context_type="hiring",
+    input_text="Should we hire this candidate from Lagos?",
+)
+print(result.trust_score, result.flags)
+```
+
+### Directly via the API
+
+The pipeline endpoint is authenticated — pass your key as a Bearer token:
 
 ```bash
 curl -X POST http://localhost:8000/pipeline/run \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer vd_live_..." \
   -d '{
     "input_text": "Should we hire this candidate from Lagos?",
     "context_type": "hiring"

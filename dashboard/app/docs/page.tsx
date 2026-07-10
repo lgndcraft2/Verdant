@@ -21,6 +21,28 @@ print(result.flags)         # ["proxy_language_detected"]
 print(result.explanation)   # "Role phrasing may disadvantage..."
 print(result.audit)         # Full reasoning chain JSON`;
 
+const hostedSample = String.raw`from verdant import VerdantClient
+
+# Point the SDK at your VERDANT deployment. Provider keys (Claude, Gemini)
+# live server-side — managed from the dashboard Settings page — so all you
+# need locally is your VERDANT key.
+client = VerdantClient(
+    api_key="vd_live_...",
+    base_url="http://localhost:8000",   # or set VERDANT_API_URL
+)
+
+# run() executes the pipeline on the hosted API over HTTP and returns the
+# same result object as wrap().
+result = await client.run(
+    context_type="hiring",
+    input_text="Should we shortlist this candidate from Kano?",
+)
+
+print(result.output)        # Response generated server-side
+print(result.trust_score)   # 0–100 composite score
+print(result.flags)         # ["proxy_language_detected"]
+print(result.explanation)   # Plain-language rationale`;
+
 const nonAiSample = String.raw`from verdant import VerdantClient
 
 client = VerdantClient(api_key="vd_live_...")
@@ -141,8 +163,12 @@ const webhookPayloadSample = String.raw`# Webhook POST payload (sent automatical
 # X-Verdant-Audit-Id: 550e8400-...
 # X-Verdant-Signature: sha256=abc123...  (HMAC-SHA256)`;
 
-const apiCurlSample = String.raw`# Run pipeline via REST API
+const apiCurlSample = String.raw`# Every SDK-facing endpoint requires your VERDANT API key as a Bearer token.
+# Generate one from the dashboard: Settings -> API keys -> Generate key.
+
+# Run pipeline via REST API
 curl -X POST http://localhost:8000/pipeline/run \
+  -H "Authorization: Bearer vd_live_..." \
   -H "Content-Type: application/json" \
   -d '{
     "input_text": "Evaluate this candidate",
@@ -151,19 +177,29 @@ curl -X POST http://localhost:8000/pipeline/run \
   }'
 
 # Fetch audit logs
-curl http://localhost:8000/audits?limit=10&context_type=hiring
+curl http://localhost:8000/audits?limit=10&context_type=hiring \
+  -H "Authorization: Bearer vd_live_..."
 
 # Get a specific audit
-curl http://localhost:8000/audits/550e8400-e29b-41d4-a716-446655440000
+curl http://localhost:8000/audits/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer vd_live_..."
 
 # Generate NDPR compliance report
-curl http://localhost:8000/reports/ndpr?days=30
+curl http://localhost:8000/reports/ndpr?days=30 \
+  -H "Authorization: Bearer vd_live_..."
 
 # Manually dispatch webhooks for an audit
-curl -X POST "http://localhost:8000/webhooks/dispatch?audit_id=550e8400-...&force=true"`;
+curl -X POST "http://localhost:8000/webhooks/dispatch?audit_id=550e8400-...&force=true" \
+  -H "Authorization: Bearer vd_live_..."`;
 
 const envVars = `# Required
 VERDANT_API_KEY=vd_live_...
+
+# Hosted mode — point the SDK at a running API. Omit to run the pipeline
+# in-process (in which case the provider keys below are used locally).
+VERDANT_API_URL=http://localhost:8000
+
+# Provider keys (server-side, or in-process mode)
 ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=AIza...
 
@@ -226,7 +262,9 @@ const apiEndpoints = [
 const tocItems = [
   { href: "#overview", label: "Overview" },
   { href: "#installation", label: "Installation" },
+  { href: "#api-keys", label: "API keys" },
   { href: "#quickstart", label: "Quick start" },
+  { href: "#hosted-mode", label: "Hosted mode" },
   { href: "#result-object", label: "Result object" },
   { href: "#context-types", label: "Context types" },
   { href: "#pipeline-stages", label: "Pipeline stages" },
@@ -429,6 +467,67 @@ export default function DocsPage() {
                 </p>
               </section>
 
+              {/* ── API keys ── */}
+              <section id="api-keys">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                  API keys
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+                  Your VERDANT API key authenticates every SDK and REST call.
+                  Generate one from the dashboard — open{" "}
+                  <Link
+                    href="/settings"
+                    className="font-semibold text-rose-700 underline-offset-2 hover:underline dark:text-rose-400"
+                  >
+                    Settings → API keys
+                  </Link>{" "}
+                  and click <strong>Generate key</strong>. Pass it to the client
+                  as{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    api_key
+                  </code>{" "}
+                  or set{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    VERDANT_API_KEY
+                  </code>
+                  .
+                </p>
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  {[
+                    { title: "Shown once", body: "The full vd_live_ key is displayed a single time at creation. Copy it immediately." },
+                    { title: "Hashed at rest", body: "Only a prefix and a SHA-256 hash are stored — VERDANT can never show the key again." },
+                    { title: "Regenerate anytime", body: "Regenerating revokes the old key immediately and issues a fresh one. Update your env after." },
+                  ].map(({ title, body }) => (
+                    <div
+                      key={title}
+                      className="rounded-lg border border-rose-950/10 bg-white p-4 dark:border-white/10 dark:bg-white/5"
+                    >
+                      <p className="flex items-center gap-2 font-semibold text-slate-900 dark:text-white">
+                        <ShieldIcon className="h-4 w-4 text-rose-700 dark:text-rose-400" aria-hidden="true" />
+                        {title}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        {body}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-6 py-5 dark:border-amber-500/20 dark:bg-amber-500/10">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300">
+                    Lost your key?
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-amber-700/80 dark:text-amber-300/70">
+                    Keys can&apos;t be recovered — only regenerated. Use{" "}
+                    <strong>Regenerate key</strong> in Settings, then update{" "}
+                    <code className="rounded bg-amber-100 px-1.5 py-0.5 text-xs dark:bg-amber-500/20">
+                      VERDANT_API_KEY
+                    </code>{" "}
+                    everywhere it&apos;s used. The previous key stops working the
+                    moment you regenerate.
+                  </p>
+                </div>
+              </section>
+
               {/* ── Quick start ── */}
               <section id="quickstart">
                 <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
@@ -437,7 +536,8 @@ export default function DocsPage() {
                 <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
                   Wrap your existing AI call. VERDANT intercepts the request,
                   runs the 5-stage pipeline, and returns the clean output
-                  alongside a full audit payload.
+                  alongside a full audit payload. This runs the pipeline{" "}
+                  <strong>in-process</strong> using your provider keys.
                 </p>
                 <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
                   <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
@@ -451,6 +551,74 @@ export default function DocsPage() {
                   <pre className="overflow-x-auto p-5 text-sm leading-7 text-slate-100">
                     <code>{codeSample}</code>
                   </pre>
+                </div>
+              </section>
+
+              {/* ── Hosted mode ── */}
+              <section id="hosted-mode">
+                <h2 className="font-display text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                  Hosted mode (SaaS)
+                </h2>
+                <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+                  Set{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    base_url
+                  </code>{" "}
+                  (or the{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    VERDANT_API_URL
+                  </code>{" "}
+                  env var) and the SDK runs the pipeline on your VERDANT
+                  deployment over HTTP via{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    client.run()
+                  </code>
+                  . Provider keys (Claude, Gemini) stay server-side — managed
+                  from the dashboard — so your app only carries a VERDANT key.
+                  Leave{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    base_url
+                  </code>{" "}
+                  unset to run in-process with{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    wrap()
+                  </code>
+                  .
+                </p>
+                <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
+                  <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-400">
+                      Python
+                    </span>
+                    <span className="font-mono text-xs text-slate-500">
+                      hosted_example.py
+                    </span>
+                  </div>
+                  <pre className="overflow-x-auto p-5 text-sm leading-7 text-slate-100">
+                    <code>{hostedSample}</code>
+                  </pre>
+                </div>
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border border-rose-950/10 bg-white p-5 dark:border-white/10 dark:bg-white/5">
+                    <p className="font-semibold text-slate-900 dark:text-white">
+                      wrap() — in-process
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                      Runs the pipeline in your own process and wraps a local
+                      callable. You supply the provider keys. Best for local
+                      development and self-hosted workloads.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-rose-950/10 bg-white p-5 dark:border-white/10 dark:bg-white/5">
+                    <p className="font-semibold text-slate-900 dark:text-white">
+                      run() — hosted
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                      Sends the input to your VERDANT API, which generates and
+                      analyses the output with server-side provider keys and logs
+                      the audit to the dashboard.
+                    </p>
+                  </div>
                 </div>
               </section>
 
@@ -838,8 +1006,12 @@ export default function DocsPage() {
                 </h2>
                 <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
                   If you&apos;re integrating via HTTP instead of the Python SDK,
-                  the FastAPI backend exposes these endpoints. All responses use a
-                  consistent envelope:{" "}
+                  the FastAPI backend exposes these endpoints. Each one requires
+                  your VERDANT API key as a{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    Authorization: Bearer
+                  </code>{" "}
+                  header. All responses use a consistent envelope:{" "}
                   <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
                     {"{ data, meta, error }"}
                   </code>

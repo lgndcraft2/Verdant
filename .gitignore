@@ -11,3 +11,4 @@ dashboard/.dev.stderr.log
 /api/.venv
 /supabase/__pycache__
 sdk/verdant/__pycache__
+/dashboard/.env.local

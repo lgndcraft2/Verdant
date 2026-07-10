@@ -242,6 +242,128 @@ class DBService:
                     return deepcopy(row)
             return None
 
+    async def create_api_key(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Insert a newly issued VERDANT API key (prefix + hash, never the raw key)."""
+        row = dict(record)
+        row.setdefault("id", str(uuid4()))
+        row.setdefault("active", True)
+        row.setdefault("scopes", [])
+        row.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+
+        if self._supabase is None:
+            stored = deepcopy(row)
+            self._memory["api_keys"].append(stored)
+            return stored
+
+        def _run() -> dict[str, Any]:
+            result = self._supabase.table("api_keys").insert(row).execute()
+            data = getattr(result, "data", None) or []
+            return data[0] if data else row
+
+        try:
+            return await asyncio.to_thread(_run)
+        except Exception as exc:
+            logger.warning("Supabase api key insert failed, storing in memory: %s", exc)
+            stored = deepcopy(row)
+            self._memory["api_keys"].append(stored)
+            return stored
+
+    async def list_api_keys(self, user_id: str, active_only: bool = True) -> list[dict[str, Any]]:
+        """List a user's API keys. Callers must strip hashed_key before returning to clients."""
+        if self._supabase is None:
+            keys = [k for k in self._memory["api_keys"] if str(k.get("user_id")) == str(user_id)]
+            if active_only:
+                keys = [k for k in keys if k.get("active", True)]
+            keys = sorted(keys, key=lambda item: _as_datetime(item.get("created_at")), reverse=True)
+            return deepcopy(keys)
+
+        def _run() -> list[dict[str, Any]]:
+            query = self._supabase.table("api_keys").select("*").eq("user_id", user_id)
+            if active_only:
+                query = query.eq("active", True)
+            result = query.order("created_at", desc=True).execute()
+            return getattr(result, "data", None) or []
+
+        try:
+            return await asyncio.to_thread(_run)
+        except Exception as exc:
+            logger.warning("Supabase api key list failed, falling back to memory: %s", exc)
+            keys = [k for k in self._memory["api_keys"] if str(k.get("user_id")) == str(user_id)]
+            if active_only:
+                keys = [k for k in keys if k.get("active", True)]
+            keys = sorted(keys, key=lambda item: _as_datetime(item.get("created_at")), reverse=True)
+            return deepcopy(keys)
+
+    async def revoke_api_keys_for_user(self, user_id: str) -> int:
+        """Deactivate all of a user's active keys. Returns how many were revoked."""
+        now = datetime.now(timezone.utc).isoformat()
+        if self._supabase is None:
+            count = 0
+            for key in self._memory["api_keys"]:
+                if str(key.get("user_id")) == str(user_id) and key.get("active", True):
+                    key["active"] = False
+                    key["updated_at"] = now
+                    count += 1
+            return count
+
+        def _run() -> int:
+            result = (
+                self._supabase.table("api_keys")
+                .update({"active": False, "updated_at": now})
+                .eq("user_id", user_id)
+                .eq("active", True)
+                .execute()
+            )
+            return len(getattr(result, "data", None) or [])
+
+        try:
+            return await asyncio.to_thread(_run)
+        except Exception as exc:
+            logger.warning("Supabase api key revoke failed, falling back to memory: %s", exc)
+            count = 0
+            for key in self._memory["api_keys"]:
+                if str(key.get("user_id")) == str(user_id) and key.get("active", True):
+                    key["active"] = False
+                    count += 1
+            return count
+
+    async def touch_api_key_last_used(self, key_prefix: str) -> None:
+        """Best-effort update of last_used_at; failures are swallowed."""
+        now = datetime.now(timezone.utc).isoformat()
+        if self._supabase is None:
+            for key in self._memory["api_keys"]:
+                if key.get("key_prefix") == key_prefix:
+                    key["last_used_at"] = now
+            return
+
+        def _run() -> None:
+            self._supabase.table("api_keys").update({"last_used_at": now}).eq(
+                "key_prefix", key_prefix
+            ).execute()
+
+        try:
+            await asyncio.to_thread(_run)
+        except Exception as exc:
+            logger.debug("last_used_at touch failed (non-fatal): %s", exc)
+
+    async def get_user_from_token(self, access_token: str) -> dict[str, Any] | None:
+        """Validate a Supabase access token and return {user_id, email}, or None."""
+        if self._supabase is None:
+            return None
+
+        def _run() -> dict[str, Any] | None:
+            response = self._supabase.auth.get_user(access_token)
+            user = getattr(response, "user", None)
+            if user is None:
+                return None
+            return {"user_id": str(user.id), "email": getattr(user, "email", None)}
+
+        try:
+            return await asyncio.to_thread(_run)
+        except Exception as exc:
+            logger.warning("Supabase token verification failed: %s", exc)
+            return None
+
     async def get_provider_key(self, provider: str) -> str | None:
         """Fetch an LLM provider API key (e.g. 'anthropic', 'gemini') from DB."""
         if self._supabase is None:

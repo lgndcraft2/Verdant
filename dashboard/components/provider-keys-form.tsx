@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { API_URL, fetchWithTimeout, getAuthHeader } from '@/lib/api'
 
 interface ProviderStatus {
   anthropic: boolean
@@ -16,7 +17,8 @@ export function ProviderKeysForm() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
   useEffect(() => {
-    fetch('http://localhost:8000/providers/keys')
+    getAuthHeader()
+      .then((headers) => fetchWithTimeout(`${API_URL}/providers/keys`, { headers }))
       .then((res) => res.json())
       .then((json) => {
         if (json.data) {
@@ -36,9 +38,10 @@ export function ProviderKeysForm() {
     setMessage(null)
 
     try {
-      const res = await fetch('http://localhost:8000/providers/keys', {
+      const authHeader = await getAuthHeader()
+      const res = await fetchWithTimeout(`${API_URL}/providers/keys`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader },
         body: JSON.stringify({ provider, api_key: key }),
       })
       const json = await res.json()

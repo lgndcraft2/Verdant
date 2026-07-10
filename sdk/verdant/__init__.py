@@ -1,5 +1,5 @@
 from .config import Settings, get_settings
-from .client import VerdantClient
+from .client import VerdantAPIError, VerdantClient
 from .models import (
     AuditPayload,
     BaselineStageOutput,
@@ -28,6 +28,7 @@ __all__ = [
     "RiskLevel",
     "Settings",
     "TrustStageOutput",
+    "VerdantAPIError",
     "VerdantClient",
     "WrapResult",
     "get_settings",

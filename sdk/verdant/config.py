@@ -16,6 +16,7 @@ class Settings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     verdant_api_key: str = ""
+    verdant_api_url: str = ""
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     supabase_url: str = ""
@@ -35,6 +36,7 @@ class Settings(BaseModel):
     def from_env(cls) -> "Settings":
         return cls(
             verdant_api_key=os.getenv("VERDANT_API_KEY", ""),
+            verdant_api_url=os.getenv("VERDANT_API_URL", ""),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
             supabase_url=os.getenv("SUPABASE_URL", ""),

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { FileTextIcon, GearIcon, HomeIcon, MenuIcon, TraceIcon, XIcon } from "./icons";
+import { createClient } from "@/lib/supabase/client";
+import { FileTextIcon, GearIcon, HomeIcon, MenuIcon, TraceIcon, UserIcon, XIcon } from "./icons";
 
 const navItems = [
   { href: "/overview", label: "Overview", icon: HomeIcon },
@@ -13,11 +14,36 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: GearIcon },
 ];
 
+type SessionUser = { name: string; email: string };
+
+function UserFooter({ user }: { user: SessionUser | null }) {
+  if (!user) return null;
+  return (
+    <div className="border-t border-rose-950/10 px-3 py-3 dark:border-white/10">
+      <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+          <UserIcon className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+            {user.name}
+          </p>
+          <p className="truncate text-xs text-slate-400 dark:text-slate-500">
+            {user.email}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SidebarContent({
   pathname,
+  user,
   onClose,
 }: {
   pathname: string;
+  user: SessionUser | null;
   onClose?: () => void;
 }) {
   return (
@@ -87,6 +113,9 @@ function SidebarContent({
           Documentation
         </Link>
       </div>
+
+      {/* Signed-in user */}
+      <UserFooter user={user} />
     </div>
   );
 }
@@ -94,13 +123,33 @@ function SidebarContent({
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const supabase = useMemo(() => createClient(), []);
+
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!active || !data.user) return;
+      const meta = data.user.user_metadata ?? {};
+      const email = data.user.email ?? "";
+      const name =
+        (meta.full_name as string) ||
+        (meta.name as string) ||
+        email.split("@")[0] ||
+        "Account";
+      setUser({ name, email });
+    });
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
 
   return (
     <div className="flex min-h-dvh bg-slate-50 text-slate-950 dark:bg-[#100a0b] dark:text-slate-50">
       {/* Desktop sidebar */}
       <aside className="hidden w-60 shrink-0 border-r border-rose-950/10 bg-white dark:border-white/10 dark:bg-white/[0.02] lg:block">
         <div className="sticky top-0 h-dvh overflow-y-auto">
-          <SidebarContent pathname={pathname} />
+          <SidebarContent pathname={pathname} user={user} />
         </div>
       </aside>
 
@@ -113,7 +162,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             aria-hidden="true"
           />
           <aside className="absolute inset-y-0 left-0 w-60 border-r border-rose-950/10 bg-white shadow-xl dark:border-white/10 dark:bg-[#100a0b]">
-            <SidebarContent pathname={pathname} onClose={() => setMobileOpen(false)} />
+            <SidebarContent pathname={pathname} user={user} onClose={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}
