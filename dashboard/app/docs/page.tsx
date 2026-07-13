@@ -28,7 +28,7 @@ const hostedSample = String.raw`from verdant import VerdantClient
 # need locally is your VERDANT key.
 client = VerdantClient(
     api_key="vd_live_...",
-    base_url="http://localhost:8000",   # or set VERDANT_API_URL
+    base_url="https://verdant-be.onrender.com",   # or set VERDANT_API_URL
 )
 
 # run() executes the pipeline on the hosted API over HTTP and returns the
@@ -167,7 +167,7 @@ const apiCurlSample = String.raw`# Every SDK-facing endpoint requires your VERDA
 # Generate one from the dashboard: Settings -> API keys -> Generate key.
 
 # Run pipeline via REST API
-curl -X POST http://localhost:8000/pipeline/run \
+curl -X POST https://verdant-be.onrender.com/pipeline/run \
   -H "Authorization: Bearer vd_live_..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -177,19 +177,19 @@ curl -X POST http://localhost:8000/pipeline/run \
   }'
 
 # Fetch audit logs
-curl http://localhost:8000/audits?limit=10&context_type=hiring \
+curl https://verdant-be.onrender.com/audits?limit=10&context_type=hiring \
   -H "Authorization: Bearer vd_live_..."
 
 # Get a specific audit
-curl http://localhost:8000/audits/550e8400-e29b-41d4-a716-446655440000 \
+curl https://verdant-be.onrender.com/audits/550e8400-e29b-41d4-a716-446655440000 \
   -H "Authorization: Bearer vd_live_..."
 
 # Generate NDPR compliance report
-curl http://localhost:8000/reports/ndpr?days=30 \
+curl https://verdant-be.onrender.com/reports/ndpr?days=30 \
   -H "Authorization: Bearer vd_live_..."
 
 # Manually dispatch webhooks for an audit
-curl -X POST "http://localhost:8000/webhooks/dispatch?audit_id=550e8400-...&force=true" \
+curl -X POST "https://verdant-be.onrender.com/webhooks/dispatch?audit_id=550e8400-...&force=true" \
   -H "Authorization: Bearer vd_live_..."`;
 
 const envVars = `# Required
@@ -197,7 +197,7 @@ VERDANT_API_KEY=vd_live_...
 
 # Hosted mode — point the SDK at a running API. Omit to run the pipeline
 # in-process (in which case the provider keys below are used locally).
-VERDANT_API_URL=http://localhost:8000
+VERDANT_API_URL=https://verdant-be.onrender.com
 
 # Provider keys (server-side, or in-process mode)
 ANTHROPIC_API_KEY=sk-ant-...

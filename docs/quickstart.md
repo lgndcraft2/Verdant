@@ -104,7 +104,7 @@ Set `VERDANT_API_URL` (or pass `base_url`) and the SDK runs the pipeline on the 
 provider keys stay server-side (managed in the dashboard), so you only need your VERDANT key:
 
 ```python
-client = VerdantClient(api_key="vd_live_...", base_url="http://localhost:8000")
+client = VerdantClient(api_key="vd_live_...", base_url="https://verdant-be.onrender.com")
 
 result = await client.run(
     context_type="hiring",
@@ -118,7 +118,7 @@ print(result.trust_score, result.flags)
 The pipeline endpoint is authenticated — pass your key as a Bearer token:
 
 ```bash
-curl -X POST http://localhost:8000/pipeline/run \
+curl -X POST https://verdant-be.onrender.com/pipeline/run \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer vd_live_..." \
   -d '{

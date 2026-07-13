@@ -1,6 +1,6 @@
 # API Reference
 
-Base URL: `http://localhost:8000`
+Base URL: `https://verdant-be.onrender.com`
 
 All responses use a consistent envelope:
 
@@ -33,7 +33,7 @@ Execute the full 5-stage reasoning pipeline on an input text.
 **Example:**
 
 ```bash
-curl -X POST http://localhost:8000/pipeline/run \
+curl -X POST https://verdant-be.onrender.com/pipeline/run \
   -H "Content-Type: application/json" \
   -d '{
     "input_text": "Reject this candidate — she is pregnant.",
@@ -77,7 +77,7 @@ List audit logs with optional filtering.
 **Example:**
 
 ```bash
-curl "http://localhost:8000/audits?context_type=hiring&limit=10"
+curl "https://verdant-be.onrender.com/audits?context_type=hiring&limit=10"
 ```
 
 **Response `data`:**
@@ -104,7 +104,7 @@ Fetch a single audit by ID.
 **Example:**
 
 ```bash
-curl "http://localhost:8000/audits/550e8400-e29b-41d4-a716-446655440000"
+curl "https://verdant-be.onrender.com/audits/550e8400-e29b-41d4-a716-446655440000"
 ```
 
 **Errors:**
@@ -131,7 +131,7 @@ Manually trigger webhook dispatch for an audit.
 **Example:**
 
 ```bash
-curl -X POST "http://localhost:8000/webhooks/dispatch?audit_id=550e8400-...&force=true"
+curl -X POST "https://verdant-be.onrender.com/webhooks/dispatch?audit_id=550e8400-...&force=true"
 ```
 
 **Response `data`:**
@@ -179,7 +179,7 @@ Generate an NDPR compliance report.
 **Example:**
 
 ```bash
-curl "http://localhost:8000/reports/ndpr?days=90"
+curl "https://verdant-be.onrender.com/reports/ndpr?days=90"
 ```
 
 **Response `data`:**
