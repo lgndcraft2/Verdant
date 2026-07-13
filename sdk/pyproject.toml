@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "verdant"
-version = "0.1.1"
+version = "0.1.2"
 description = "VERDANT SDK for inspectable AI governance"
 readme = "README.md"
 requires-python = ">=3.11"
