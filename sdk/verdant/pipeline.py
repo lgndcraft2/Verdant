@@ -152,6 +152,7 @@ class VerdantPipeline:
         input_text: str | None = None,
         fn_kwargs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
+        precomputed_output: Any | None = None,
     ) -> WrapResult:
         started_at = time.perf_counter()
         metadata = metadata or {}
@@ -175,11 +176,18 @@ class VerdantPipeline:
         )
 
         pipeline_error: str | None = None
+        raw_output: Any
+        clean_output: Any
 
-        if fn is None:
+        if precomputed_output is not None:
+            # Caller already produced the output (e.g. hybrid wrap: the model was
+            # called client-side); we only run the analysis stages on it here.
+            raw_output = precomputed_output
+            clean_output = precomputed_output
+        elif fn is None:
             try:
-                raw_output: Any = await self._generate_default_output(resolved_input_text, intent, baseline, metadata)
-                clean_output: Any = raw_output
+                raw_output = await self._generate_default_output(resolved_input_text, intent, baseline, metadata)
+                clean_output = raw_output
             except Exception as exc:  # pragma: no cover - catch-all guard
                 logger.exception("Default generation failed unexpectedly: %s", exc)
                 raw_output = {"error": str(exc)}

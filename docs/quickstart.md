@@ -113,6 +113,32 @@ result = await client.run(
 print(result.trust_score, result.flags)
 ```
 
+### Hybrid: wrap your own call, analyze on the server
+
+Want to keep calling **your own** model but skip local provider keys? Pass
+`remote_analysis=True`. Your `fn` runs locally, and only the analysis stages run on the
+hosted API using the dashboard-managed keys:
+
+```python
+client = VerdantClient(api_key="vd_live_...", base_url="https://verdant-be.onrender.com")
+
+def gen(**kwargs):
+    return genai_client.models.generate_content(**kwargs).text
+
+result = await client.wrap(
+    fn=gen,
+    context_type="hiring",
+    input_text=question,
+    model="gemini-2.5-flash",
+    contents=question,
+    remote_analysis=True,   # analysis runs server-side with dashboard keys
+)
+print(result.output)        # your model's output
+print(result.trust_score)   # scored server-side — no local ANTHROPIC/GEMINI key needed
+```
+
+Requires an Anthropic/Gemini key configured in the dashboard (Settings → Provider Keys).
+
 ### Directly via the API
 
 The pipeline endpoint is authenticated — pass your key as a Bearer token:

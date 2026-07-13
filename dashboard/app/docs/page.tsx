@@ -598,7 +598,7 @@ export default function DocsPage() {
                     <code>{hostedSample}</code>
                   </pre>
                 </div>
-                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div className="mt-6 grid gap-4 sm:grid-cols-3">
                   <div className="rounded-lg border border-rose-950/10 bg-white p-5 dark:border-white/10 dark:bg-white/5">
                     <p className="font-semibold text-slate-900 dark:text-white">
                       wrap() — in-process
@@ -617,6 +617,16 @@ export default function DocsPage() {
                       Sends the input to your VERDANT API, which generates and
                       analyses the output with server-side provider keys and logs
                       the audit to the dashboard.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-rose-950/10 bg-white p-5 dark:border-white/10 dark:bg-white/5">
+                    <p className="font-semibold text-slate-900 dark:text-white">
+                      wrap(remote_analysis=True) — hybrid
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
+                      Runs your own model call locally, then analyses the output
+                      on the server with dashboard-managed keys — so you keep your
+                      call but need no local provider keys.
                     </p>
                   </div>
                 </div>

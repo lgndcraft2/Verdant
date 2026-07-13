@@ -150,3 +150,16 @@ class PipelineRunRequest(VerdantBaseModel):
     input_text: str
     context_type: ContextType
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PipelineAnalyzeRequest(VerdantBaseModel):
+    """Analyze an output the caller already produced (hybrid wrap).
+
+    The server runs the reasoning stages on ``output_text`` using its own
+    provider keys; ``context_type`` is optional and inferred when omitted.
+    """
+
+    input_text: str
+    output_text: str
+    context_type: ContextType | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
