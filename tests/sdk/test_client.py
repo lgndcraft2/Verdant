@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock
 
 from sdk.verdant.client import VerdantAPIError, VerdantClient
+from sdk.verdant.config import Settings
 from sdk.verdant.models import ContextType
 
 @pytest.mark.asyncio
@@ -80,7 +81,8 @@ async def test_wrap_remote_analysis_runs_fn_locally_and_posts_output(mocker):
 
 @pytest.mark.asyncio
 async def test_wrap_remote_analysis_requires_hosted():
-    client = VerdantClient(api_key="vd_live_x")  # no base_url -> not hosted
+    # Explicitly clear the (now baked-in) URL so the client is not hosted.
+    client = VerdantClient(settings=Settings(verdant_api_key="vd_live_x", verdant_api_url=""))
     with pytest.raises(VerdantAPIError):
         await client.wrap(
             lambda **k: "x",
@@ -88,3 +90,10 @@ async def test_wrap_remote_analysis_requires_hosted():
             input_text="q",
             remote_analysis=True,
         )
+
+
+def test_default_api_url_is_baked_in():
+    # A key alone is enough to be "hosted" now — no base_url needed.
+    client = VerdantClient(api_key="vd_live_x")
+    assert client.settings.verdant_api_url  # non-empty default
+    assert client._is_hosted is True

@@ -100,11 +100,12 @@ print(result.explanation)   # Plain-language explanation
 
 ## Hosted Mode (SaaS)
 
-Set `VERDANT_API_URL` (or pass `base_url`) and the SDK runs the pipeline on the hosted API —
-provider keys stay server-side (managed in the dashboard), so you only need your VERDANT key:
+The SDK targets the hosted VERDANT API **by default**, so you only need your VERDANT key —
+the pipeline runs server-side with dashboard-managed provider keys. (Override the target with
+the `VERDANT_API_URL` env var or `base_url=` for self-hosting.)
 
 ```python
-client = VerdantClient(api_key="vd_live_...", base_url="https://verdant-be.onrender.com")
+client = VerdantClient(api_key="vd_live_...")   # base_url defaults to the hosted API
 
 result = await client.run(
     context_type="hiring",
@@ -120,7 +121,7 @@ Want to keep calling **your own** model but skip local provider keys? Pass
 hosted API using the dashboard-managed keys:
 
 ```python
-client = VerdantClient(api_key="vd_live_...", base_url="https://verdant-be.onrender.com")
+client = VerdantClient(api_key="vd_live_...")   # hosted by default
 
 def gen(**kwargs):
     return genai_client.models.generate_content(**kwargs).text

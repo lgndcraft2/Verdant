@@ -5,6 +5,10 @@ from functools import lru_cache
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Default hosted VERDANT API. Baked in so `VerdantClient(api_key=...)` works with no
+# base_url; override with the VERDANT_API_URL env var or base_url=/settings=.
+DEFAULT_API_URL = "https://verdant-be.onrender.com"
+
 
 def _split_csv(value: str | None, default: list[str]) -> list[str]:
     if not value:
@@ -16,7 +20,7 @@ class Settings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     verdant_api_key: str = ""
-    verdant_api_url: str = ""
+    verdant_api_url: str = DEFAULT_API_URL
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     supabase_url: str = ""
@@ -36,7 +40,7 @@ class Settings(BaseModel):
     def from_env(cls) -> "Settings":
         return cls(
             verdant_api_key=os.getenv("VERDANT_API_KEY", ""),
-            verdant_api_url=os.getenv("VERDANT_API_URL", ""),
+            verdant_api_url=os.getenv("VERDANT_API_URL", DEFAULT_API_URL),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
             supabase_url=os.getenv("SUPABASE_URL", ""),
