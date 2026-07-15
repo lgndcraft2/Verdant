@@ -192,42 +192,27 @@ curl https://verdant-be.onrender.com/reports/ndpr?days=30 \
 curl -X POST "https://verdant-be.onrender.com/webhooks/dispatch?audit_id=550e8400-...&force=true" \
   -H "Authorization: Bearer vd_live_..."`;
 
-const envVars = `# Required
+const envVars = `# Your VERDANT API key — from the dashboard: Settings → API keys
 VERDANT_API_KEY=vd_live_...
 
-# Hosted mode — point the SDK at a running API. Omit to run the pipeline
-# in-process (in which case the provider keys below are used locally).
-VERDANT_API_URL=https://verdant-be.onrender.com
+# Optional — override the hosted API URL (defaults to the VERDANT cloud)
+# VERDANT_API_URL=https://verdant-be.onrender.com
 
-# Provider keys (server-side, or in-process mode)
+# Only needed for fully local, in-process wrap(). In hosted and hybrid modes
+# these live in the dashboard (Settings → Provider Keys), not in your app.
 ANTHROPIC_API_KEY=sk-ant-...
-GEMINI_API_KEY=AIza...
+GEMINI_API_KEY=AIza...`;
 
-# Database
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
+const configSample = `from verdant import VerdantClient
 
-# Cache
-REDIS_URL=redis://localhost:6379
+# Hosted by default — just pass your key.
+client = VerdantClient(api_key="vd_live_...")
 
-# Webhooks
-WEBHOOK_SECRET=whsec_...
-
-# Config
-ENVIRONMENT=development
-LOG_LEVEL=info
-TRUST_SCORE_ALERT_THRESHOLD=40`;
-
-const configSample = `from verdant import VerdantClient, VerdantConfig
-
-config = VerdantConfig(
-    trust_score_alert_threshold=60,  # Default: 40
-    baseline_version="v2.1",         # Pin a baseline
-    webhook_url="https://...",        # Override endpoint
-    log_level="debug",
-)
-
-client = VerdantClient(api_key="vd_live_...", config=config)`;
+# Or point at a specific / self-hosted deployment:
+client = VerdantClient(
+    api_key="vd_live_...",
+    base_url="https://verdant-be.onrender.com",
+)`;
 
 const contextTypes = [
   { type: "hiring", desc: "Recruitment, candidate evaluation, job screening.", aliases: "—" },
@@ -252,7 +237,8 @@ const auditFields = [
 ];
 
 const apiEndpoints = [
-  { method: "POST", path: "/pipeline/run", desc: "Execute the 5-stage reasoning pipeline on an input. Returns full audit payload with trust score, flags, and explanation." },
+  { method: "POST", path: "/pipeline/run", desc: "Generate an output for the input and run the 5-stage pipeline. Returns full audit payload with trust score, flags, and explanation." },
+  { method: "POST", path: "/pipeline/analyze", desc: "Analyze an output you already produced (input_text + output_text). Runs the pipeline stages server-side without re-generating. Powers hybrid wrap()." },
   { method: "GET", path: "/audits", desc: "List audit logs with pagination. Supports filtering by context_type. Query params: limit, offset, context_type." },
   { method: "GET", path: "/audits/{audit_id}", desc: "Retrieve a single audit record by ID. Returns the full stage breakdown and metadata." },
   { method: "GET", path: "/reports/ndpr", desc: "Generate an NDPR compliance report. Aggregates trust scores, flag counts, and context breakdown. Query param: days (default 30)." },
@@ -1146,11 +1132,12 @@ export default function DocsPage() {
                   Environment variables
                 </h2>
                 <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-                  Copy{" "}
+                  These are the only variables the SDK reads. In hosted and
+                  hybrid mode you just need your{" "}
                   <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
-                    .env.example
+                    VERDANT_API_KEY
                   </code>{" "}
-                  from the repo root and populate with your credentials.
+                  — provider keys are managed in the dashboard, not your app.
                 </p>
                 <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
                   <div className="border-b border-white/10 px-5 py-3">
@@ -1168,8 +1155,16 @@ export default function DocsPage() {
                   Configuration
                 </h2>
                 <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-                  The SDK reads from environment variables by default. Pass a
-                  config object to the client for per-deployment overrides.
+                  The client reads{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    VERDANT_API_KEY
+                  </code>{" "}
+                  (and optional{" "}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
+                    VERDANT_API_URL
+                  </code>
+                  ) from the environment, or you can pass them as constructor
+                  arguments.
                 </p>
                 <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
                   <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
@@ -1187,12 +1182,11 @@ export default function DocsPage() {
                     Trust score alert threshold
                   </p>
                   <p className="mt-2 text-sm leading-7 text-rose-700/80 dark:text-rose-300/70">
-                    The default threshold is{" "}
-                    <strong className="text-rose-800 dark:text-rose-300">40</strong>.
-                    Outputs with trust scores below this value trigger a webhook
-                    POST to your configured endpoint. Lower it to catch more
-                    edge cases; raise it in high-volume contexts where you want
-                    fewer alerts.
+                    Outputs scoring below the alert threshold (default{" "}
+                    <strong className="text-rose-800 dark:text-rose-300">40</strong>)
+                    trigger a webhook POST to your configured endpoint. This
+                    threshold is set on your VERDANT deployment (via the
+                    dashboard), not in the SDK.
                   </p>
                 </div>
               </section>
