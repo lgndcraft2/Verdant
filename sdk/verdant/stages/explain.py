@@ -1,54 +1,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from ..config import Settings, get_settings
-from ..models import BaselineStageOutput, BiasStageOutput, ContextType, ExplainStageOutput, IntentStageOutput
+from ..errors import ProviderUnavailableError
+from ..models import BaselineStageOutput, BiasStageOutput, ExplainStageOutput, IntentStageOutput
 from ..services.claude_service import ClaudeService
 from ..services.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)
-
-
-def _heuristic_explanation(
-    input_text: str,
-    output_text: str,
-    *,
-    intent: IntentStageOutput,
-    baseline: BaselineStageOutput,
-    bias: BiasStageOutput,
-) -> ExplainStageOutput:
-    if bias.flags:
-        explanation = (
-            f"The output may be risky because it matches {len(bias.flags)} bias signal(s) "
-            f"against the {baseline.context_type.value} baseline."
-        )
-        caveats = [
-            "A human reviewer should inspect the flagged logic before production use.",
-            "The result may rely on proxy signals instead of task-relevant evidence.",
-        ]
-    else:
-        explanation = (
-            f"The output aligns with the {baseline.context_type.value} baseline and does not show a clear bias pattern."
-        )
-        caveats = [
-            "This is a heuristic check; edge cases still need review in high-stakes contexts.",
-        ]
-
-    reasoning_summary = [
-        f"Intent detected: {intent.detected_intent}.",
-        f"Baseline source: {baseline.source} ({baseline.baseline_version}).",
-        f"Bias severity: {bias.severity.value}.",
-    ]
-
-    confidence = max(0.4, min(0.95, (intent.confidence + baseline.confidence + bias.confidence) / 3))
-    return ExplainStageOutput(
-        plain_language_explanation=explanation,
-        reasoning_summary=reasoning_summary,
-        caveats=caveats,
-        confidence=confidence,
-    )
 
 
 async def generate_explanation(
@@ -78,10 +38,13 @@ async def generate_explanation(
     try:
         return await claude_service.generate_json("explain", user_prompt, ExplainStageOutput)
     except Exception as exc:
-        logger.warning("Claude explanation generation failed, falling back to Gemini/heuristics: %s", exc)
+        logger.warning("Claude explanation generation failed, falling back to Gemini: %s", exc)
 
     try:
         return await gemini_service.generate_json("explain", user_prompt, ExplainStageOutput)
     except Exception as exc:
-        logger.warning("Gemini explanation generation failed, using heuristics: %s", exc)
-        return _heuristic_explanation(input_text, output_text, intent=intent, baseline=baseline, bias=bias)
+        logger.error("Gemini explanation generation failed and heuristic fallback is disabled: %s", exc)
+        raise ProviderUnavailableError(
+            "Explanation generation failed: no provider model is available. Configure an "
+            "Anthropic or Gemini key in the dashboard (Settings -> Provider Keys)."
+        ) from exc

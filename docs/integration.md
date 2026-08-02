@@ -152,7 +152,7 @@ records the run, the trust score is capped to critical, and `audit.error` holds 
 |---|---|---|
 | `VerdantClient requires an api_key` | No key passed and `VERDANT_API_KEY` not set | Pass `VerdantClient(api_key="vd_live_...")` or set `VERDANT_API_KEY` |
 | `VERDANT API returned 404` | Server doesn't have the endpoint yet | Update/redeploy the VERDANT API |
-| heuristic-only scores | No provider key reachable | Add an Anthropic/Gemini key in the dashboard → Settings → Provider Keys |
+| `503` / "no provider model is available" | No provider key reachable | Add an Anthropic/Gemini key in the dashboard → Settings → Provider Keys |
 | `result.output` is a big object, not text | Your `fn` returned a raw SDK response | Return the text, e.g. `...generate_content(**kwargs).text` |
 | `401 Unauthorized` | Missing/invalid VERDANT key | Regenerate in Settings → API keys and update `VERDANT_API_KEY` |
 

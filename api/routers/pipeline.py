@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, status
 
 from api.routers.webhooks import dispatch_low_trust_webhooks
+from sdk.verdant.errors import ProviderUnavailableError
 from sdk.verdant.models import PipelineAnalyzeRequest, PipelineRunRequest, WrapResult
 
 router = APIRouter(tags=["pipeline"])
@@ -47,6 +48,8 @@ async def run_pipeline(request: Request, body: PipelineRunRequest) -> dict[str, 
             metadata=body.metadata,
         )
         return await _finalize(request, result)
+    except ProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
@@ -67,5 +70,7 @@ async def analyze_pipeline(request: Request, body: PipelineAnalyzeRequest) -> di
             metadata=body.metadata,
         )
         return await _finalize(request, result)
+    except ProviderUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))

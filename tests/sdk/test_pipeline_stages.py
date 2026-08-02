@@ -1,24 +1,45 @@
 import pytest
-from sdk.verdant.stages.bias import match_bias_patterns
-from sdk.verdant.stages.trust import synthesize_trust_score
-from sdk.verdant.stages.intent import _heuristic_intent, _detect_context
-from sdk.verdant.models import ContextType, BiasSeverity, IntentStageOutput, BaselineStageOutput, BiasStageOutput, ExplainStageOutput, RiskLevel
 
-@pytest.mark.asyncio
-async def test_bias_patterns():
-    intent = IntentStageOutput(
+from sdk.verdant.errors import ProviderUnavailableError
+from sdk.verdant.pipeline import VerdantPipeline
+from sdk.verdant.stages.bias import match_bias_patterns
+from sdk.verdant.stages.explain import generate_explanation
+from sdk.verdant.stages.intent import extract_intent
+from sdk.verdant.stages.trust import synthesize_trust_score
+from sdk.verdant.models import (
+    BaselineStageOutput,
+    BiasSeverity,
+    BiasStageOutput,
+    ContextType,
+    ExplainStageOutput,
+    IntentStageOutput,
+    RiskLevel,
+)
+
+
+def _intent() -> IntentStageOutput:
+    return IntentStageOutput(
         detected_intent="test",
         context_type=ContextType.hiring,
         user_intent_summary="test",
-        confidence=0.9
+        confidence=0.9,
     )
-    baseline = BaselineStageOutput(
+
+
+def _baseline() -> BaselineStageOutput:
+    return BaselineStageOutput(
         context_type=ContextType.hiring,
         baseline_name="test",
         baseline_version="1",
         baseline_summary="test",
-        confidence=0.9
+        confidence=0.9,
     )
+
+
+@pytest.mark.asyncio
+async def test_bias_patterns():
+    intent = _intent()
+    baseline = _baseline()
 
     # Test gender exclusion
     bias1 = await match_bias_patterns("Input", "This job is for male only candidates.", intent=intent, baseline=baseline)
@@ -35,17 +56,72 @@ async def test_bias_patterns():
     assert len(bias3.flags) == 0
     assert bias3.severity == BiasSeverity.low
 
-def test_heuristic_intent():
-    # Lending detection
-    result = _heuristic_intent("Can I get a loan?", None)
-    assert result.context_type == ContextType.lending
-    assert result.detected_intent == "assess_credit_risk"
-    
-    # Hiring detection
-    result2 = _heuristic_intent("Review this resume for the software engineer job", None)
-    assert result2.context_type == ContextType.hiring
-    assert result2.detected_intent == "screen_candidates"
-    assert "review_request" in result2.signals
+
+@pytest.mark.asyncio
+async def test_intent_raises_when_no_provider(mocker):
+    # Heuristics are gone: if both models fail, intent must fail loudly.
+    claude = mocker.AsyncMock()
+    claude.generate_json.side_effect = RuntimeError("no claude")
+    gemini = mocker.AsyncMock()
+    gemini.generate_json.side_effect = RuntimeError("no gemini")
+
+    with pytest.raises(ProviderUnavailableError):
+        await extract_intent("Review this resume", claude_service=claude, gemini_service=gemini)
+
+
+@pytest.mark.asyncio
+async def test_intent_falls_back_to_gemini(mocker):
+    claude = mocker.AsyncMock()
+    claude.generate_json.side_effect = RuntimeError("no claude")
+    gemini = mocker.AsyncMock()
+    gemini.generate_json.return_value = _intent()
+
+    result = await extract_intent("Review this resume", claude_service=claude, gemini_service=gemini)
+    assert result.detected_intent == "test"
+    gemini.generate_json.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_explanation_raises_when_no_provider(mocker):
+    claude = mocker.AsyncMock()
+    claude.generate_json.side_effect = RuntimeError("no claude")
+    gemini = mocker.AsyncMock()
+    gemini.generate_json.side_effect = RuntimeError("no gemini")
+    bias = BiasStageOutput(summary="t", confidence=0.9, bias_score=0, severity=BiasSeverity.low)
+
+    with pytest.raises(ProviderUnavailableError):
+        await generate_explanation(
+            "in", "out",
+            intent=_intent(), baseline=_baseline(), bias=bias,
+            claude_service=claude, gemini_service=gemini,
+        )
+
+
+@pytest.mark.asyncio
+async def test_generation_raises_when_no_provider(mocker):
+    # #2: generation now tries Claude, then Gemini, then raises (no input echo).
+    claude = mocker.AsyncMock()
+    claude.generate_text.side_effect = RuntimeError("no claude")
+    gemini = mocker.AsyncMock()
+    gemini.generate_text.side_effect = RuntimeError("no gemini")
+
+    pipe = VerdantPipeline(claude_service=claude, gemini_service=gemini)
+    with pytest.raises(ProviderUnavailableError):
+        await pipe._generate_default_output("hello", _intent(), _baseline(), {})
+
+
+@pytest.mark.asyncio
+async def test_generation_falls_back_to_gemini(mocker):
+    claude = mocker.AsyncMock()
+    claude.generate_text.side_effect = RuntimeError("no claude")
+    gemini = mocker.AsyncMock()
+    gemini.generate_text.return_value = "gemini answer"
+
+    pipe = VerdantPipeline(claude_service=claude, gemini_service=gemini)
+    out = await pipe._generate_default_output("hello", _intent(), _baseline(), {})
+    assert out == "gemini answer"
+    gemini.generate_text.assert_awaited_once()
+
 
 @pytest.mark.asyncio
 async def test_trust_synthesis(mocker):
@@ -58,24 +134,24 @@ async def test_trust_synthesis(mocker):
         context_type=ContextType.hiring,
         user_intent_summary="test",
         confidence=1.0,
-        needs_review=False
+        needs_review=False,
     )
     baseline = BaselineStageOutput(
         context_type=ContextType.hiring,
         baseline_name="test",
         baseline_version="1",
         baseline_summary="test",
-        confidence=1.0
+        confidence=1.0,
     )
     bias = BiasStageOutput(
         summary="Test",
         confidence=1.0,
-        bias_score=0, # 100% bias signal strength
-        severity=BiasSeverity.low
+        bias_score=0,  # 100% bias signal strength
+        severity=BiasSeverity.low,
     )
     explanation = ExplainStageOutput(
         plain_language_explanation="Test",
-        confidence=1.0
+        confidence=1.0,
     )
 
     trust = await synthesize_trust_score(
@@ -83,7 +159,7 @@ async def test_trust_synthesis(mocker):
         baseline=baseline,
         bias=bias,
         explanation=explanation,
-        db_service=mock_db
+        db_service=mock_db,
     )
 
     # With perfect scores:

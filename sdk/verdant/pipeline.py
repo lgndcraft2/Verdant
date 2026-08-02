@@ -8,6 +8,7 @@ import time
 from typing import Any, Callable
 
 from .config import Settings, get_settings
+from .errors import ProviderUnavailableError
 from .models import (
     AuditPayload,
     BaselineStageOutput,
@@ -141,8 +142,16 @@ class VerdantPipeline:
         try:
             return await self.claude_service.generate_text("generate", prompt)
         except Exception as exc:
-            logger.warning("Default output generation failed, using input echo fallback: %s", exc)
-            return input_text
+            logger.warning("Claude default generation failed, falling back to Gemini: %s", exc)
+
+        try:
+            return await self.gemini_service.generate_text("generate", prompt)
+        except Exception as exc:
+            logger.error("Gemini default generation failed and echo fallback is disabled: %s", exc)
+            raise ProviderUnavailableError(
+                "Output generation failed: no provider model is available. Configure an "
+                "Anthropic or Gemini key in the dashboard (Settings -> Provider Keys)."
+            ) from exc
 
     async def run(
         self,
