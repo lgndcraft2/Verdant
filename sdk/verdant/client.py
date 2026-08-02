@@ -7,7 +7,6 @@ import httpx
 from .config import Settings, get_settings
 from .models import ContextType, WrapResult
 from .pipeline import (
-    VerdantPipeline,
     _call_target,
     _derive_input_text,
     _json_safe,
@@ -22,13 +21,21 @@ class VerdantAPIError(RuntimeError):
 
 
 class VerdantClient:
+    """Client for the hosted VERDANT API.
+
+    Authentication is by VERDANT API key only. Generate one in the dashboard
+    (Settings -> API keys) and pass it as ``VerdantClient(api_key="vd_live_...")``
+    or via the ``VERDANT_API_KEY`` environment variable. The API URL is baked in,
+    so the key is all you need. Provider (Claude/Gemini) keys stay server-side and
+    are managed in the dashboard.
+    """
+
     def __init__(
         self,
         api_key: str | None = None,
         *,
         base_url: str | None = None,
         settings: Settings | None = None,
-        pipeline: VerdantPipeline | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         updates: dict[str, Any] = {}
@@ -38,12 +45,16 @@ class VerdantClient:
             updates["verdant_api_url"] = base_url
         if updates:
             self.settings = self.settings.model_copy(update=updates)
-        self.pipeline = pipeline or VerdantPipeline(self.settings)
 
-    @property
-    def _is_hosted(self) -> bool:
-        """Use the hosted API when both a base URL and a VERDANT key are configured."""
-        return bool(self.settings.verdant_api_url and self.settings.verdant_api_key)
+    def _require_key(self) -> None:
+        if not self.settings.verdant_api_key:
+            raise VerdantAPIError(
+                "VerdantClient requires an api_key. Generate one in the dashboard "
+                "(Settings -> API keys) and pass VerdantClient(api_key='vd_live_...') "
+                "or set VERDANT_API_KEY."
+            )
+        if not self.settings.verdant_api_url:
+            raise VerdantAPIError("The VERDANT API URL is not configured.")
 
     async def wrap(
         self,
@@ -52,87 +63,27 @@ class VerdantClient:
         context_type: str | ContextType | None = None,
         input_text: str | None = None,
         metadata: dict[str, Any] | None = None,
-        remote_analysis: bool = False,
         **fn_kwargs: Any,
     ) -> WrapResult:
-        """Wrap a model call and run the reasoning pipeline on its output.
+        """Run your model call locally, then analyse its output with VERDANT.
 
-        By default the whole pipeline runs in-process (provider keys must be set
-        locally). With ``remote_analysis=True`` the wrapped ``fn`` still runs
-        locally, but the analysis stages run on the hosted API using its
-        dashboard-managed provider keys — so no local provider keys are needed.
-        Requires ``base_url``/``VERDANT_API_URL`` and an ``api_key``.
+        ``fn`` runs on your machine (so you keep your own provider keys and any
+        custom call logic); its output is sent to VERDANT for scoring. Anything
+        after ``context_type``, ``input_text``, and ``metadata`` is forwarded to
+        ``fn`` as keyword arguments.
         """
-        if remote_analysis:
-            return await self._wrap_remote(
-                fn,
-                context_type=context_type,
-                input_text=input_text,
-                metadata=metadata,
-                fn_kwargs=fn_kwargs,
-            )
-        return await self.pipeline.run(
-            fn=fn,
-            context_type=context_type,
-            input_text=input_text,
-            fn_kwargs=fn_kwargs,
-            metadata=metadata,
-        )
+        self._require_key()
 
-    async def run(
-        self,
-        *,
-        context_type: str | ContextType,
-        input_text: str,
-        metadata: dict[str, Any] | None = None,
-    ) -> WrapResult:
-        """Run the reasoning pipeline for the given input.
-
-        In hosted mode (a ``verdant_api_url`` and ``verdant_api_key`` are set) this calls
-        the VERDANT API over HTTP, so provider (Claude/Gemini) keys stay server-side. Otherwise
-        it runs the pipeline in-process.
-        """
-        if self._is_hosted:
-            return await self._post_pipeline(
-                "/pipeline/run",
-                {
-                    "context_type": _context_value(context_type),
-                    "input_text": input_text,
-                    "metadata": metadata or {},
-                },
-            )
-        return await self.pipeline.run(
-            context_type=context_type,
-            input_text=input_text,
-            metadata=metadata,
-        )
-
-    async def _wrap_remote(
-        self,
-        fn: Callable[..., Any],
-        *,
-        context_type: str | ContextType | None,
-        input_text: str | None,
-        metadata: dict[str, Any] | None,
-        fn_kwargs: dict[str, Any],
-    ) -> WrapResult:
-        if not self._is_hosted:
-            raise VerdantAPIError(
-                "remote_analysis=True requires a hosted API: set base_url / VERDANT_API_URL "
-                "and an api_key."
-            )
-
-        # Call the model locally; keep the wrapped output even if analysis is remote.
+        # Call the model locally; keep the caller's output even if the call fails.
         try:
             raw_output: Any = await _call_target(fn, fn_kwargs)
             output_value = _json_safe(raw_output)
-        except Exception as exc:  # keep the caller's app up, mirror in-process behaviour
+        except Exception as exc:  # keep the caller's app up
             raw_output = {"error": str(exc)}
             output_value = raw_output
 
-        resolved_input = input_text or _derive_input_text(fn_kwargs)
         payload: dict[str, Any] = {
-            "input_text": resolved_input,
+            "input_text": input_text or _derive_input_text(fn_kwargs),
             "output_text": _stringify_output(output_value),
             "metadata": metadata or {},
         }
@@ -142,6 +93,28 @@ class VerdantClient:
         result = await self._post_pipeline("/pipeline/analyze", payload)
         # Hand back the caller's own output rather than the echoed text.
         return result.model_copy(update={"output": output_value})
+
+    async def run(
+        self,
+        *,
+        context_type: str | ContextType,
+        input_text: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> WrapResult:
+        """Run the full reasoning pipeline on VERDANT for the given input.
+
+        VERDANT calls the model and runs every stage server-side, so no provider
+        keys are needed in your app.
+        """
+        self._require_key()
+        return await self._post_pipeline(
+            "/pipeline/run",
+            {
+                "context_type": _context_value(context_type),
+                "input_text": input_text,
+                "metadata": metadata or {},
+            },
+        )
 
     async def _post_pipeline(self, path: str, payload: dict[str, Any]) -> WrapResult:
         url = self.settings.verdant_api_url.rstrip("/") + path

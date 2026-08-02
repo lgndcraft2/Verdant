@@ -76,52 +76,35 @@ Sign in to the dashboard, open **Settings → API keys**, and click **Generate k
 `vd_live_...` key immediately — it's shown only once (only a hash is stored). Lost it? Use
 **Regenerate key**, which revokes the old one and issues a new one.
 
-## Your First Wrap (local, in-process)
+The SDK talks to the hosted VERDANT API — **your VERDANT key is all you need**. The pipeline
+runs server-side with the provider keys you set in the dashboard, so no `ANTHROPIC_API_KEY` /
+`GEMINI_API_KEY` lives in your app.
 
-Runs the pipeline in your own process using your provider keys from `.env`:
+## `run()` — let VERDANT do everything
 
 ```python
 from verdant import VerdantClient
 
 client = VerdantClient(api_key="vd_live_...")
 
-# Wrap any AI call
-result = await client.wrap(
-    fn=openai.chat.completions.create,
-    model="gpt-4o",
-    messages=[{"role": "user", "content": "Is this candidate a good fit?"}]
+result = await client.run(
+    context_type="hiring",
+    input_text="Should we hire this candidate from Lagos?",
 )
-
-print(result.output)        # Clean AI response
+print(result.output)        # AI response
 print(result.trust_score)   # 0–100
 print(result.flags)         # Bias/risk flags
 print(result.explanation)   # Plain-language explanation
 ```
 
-## Hosted Mode (SaaS)
+## `wrap()` — call your own model, analyze on the server
 
-The SDK targets the hosted VERDANT API **by default**, so you only need your VERDANT key —
-the pipeline runs server-side with dashboard-managed provider keys. (Override the target with
-the `VERDANT_API_URL` env var or `base_url=` for self-hosting.)
-
-```python
-client = VerdantClient(api_key="vd_live_...")   # base_url defaults to the hosted API
-
-result = await client.run(
-    context_type="hiring",
-    input_text="Should we hire this candidate from Lagos?",
-)
-print(result.trust_score, result.flags)
-```
-
-### Hybrid: wrap your own call, analyze on the server
-
-Want to keep calling **your own** model but skip local provider keys? Pass
-`remote_analysis=True`. Your `fn` runs locally, and only the analysis stages run on the
-hosted API using the dashboard-managed keys:
+Want to keep calling **your own** model (custom prompts, streaming, a provider VERDANT
+doesn't host)? `wrap()` runs your `fn` locally, then sends its output to VERDANT for scoring.
+Return a **string** so VERDANT scores the actual text:
 
 ```python
-client = VerdantClient(api_key="vd_live_...")   # hosted by default
+client = VerdantClient(api_key="vd_live_...")
 
 def gen(**kwargs):
     return genai_client.models.generate_content(**kwargs).text
@@ -132,13 +115,14 @@ result = await client.wrap(
     input_text=question,
     model="gemini-2.5-flash",
     contents=question,
-    remote_analysis=True,   # analysis runs server-side with dashboard keys
 )
 print(result.output)        # your model's output
-print(result.trust_score)   # scored server-side — no local ANTHROPIC/GEMINI key needed
+print(result.trust_score)   # scored server-side
 ```
 
-Requires an Anthropic/Gemini key configured in the dashboard (Settings → Provider Keys).
+Anything after `fn`, `context_type`, `input_text`, and `metadata` is forwarded to your
+function as keyword arguments. Requires an Anthropic/Gemini key configured in the dashboard
+(Settings → Provider Keys).
 
 ### Directly via the API
 

@@ -1,50 +1,13 @@
 import pytest
-from unittest.mock import AsyncMock
 
 from sdk.verdant.client import VerdantAPIError, VerdantClient
 from sdk.verdant.config import Settings
 from sdk.verdant.models import ContextType
 
-@pytest.mark.asyncio
-async def test_verdant_client_wrap(mocker):
-    # Mock the pipeline
-    mock_pipeline = mocker.patch("sdk.verdant.client.VerdantPipeline")
-    mock_pipeline_instance = mock_pipeline.return_value
-    
-    mock_result = AsyncMock()
-    mock_result.output = "Test Output"
-    mock_result.trust_score = 85
-    mock_pipeline_instance.run = mocker.AsyncMock(return_value=mock_result)
-    
-    client = VerdantClient(api_key="test_key")
-    
-    # Dummy function
-    async def dummy_ai_call(prompt: str):
-        return "Test Output"
-        
-    result = await client.wrap(
-        dummy_ai_call,
-        context_type=ContextType.hiring,
-        input_text="Test Input",
-        prompt="Test Input"
-    )
-    
-    assert result.output == "Test Output"
-    assert result.trust_score == 85
-    
-    mock_pipeline_instance.run.assert_called_once_with(
-        fn=dummy_ai_call,
-        context_type=ContextType.hiring,
-        input_text="Test Input",
-        fn_kwargs={"prompt": "Test Input"},
-        metadata=None
-    )
-
 
 @pytest.mark.asyncio
-async def test_wrap_remote_analysis_runs_fn_locally_and_posts_output(mocker):
-    # Hosted config so remote analysis is allowed.
-    client = VerdantClient(api_key="vd_live_x", base_url="https://api.example")
+async def test_wrap_runs_fn_locally_and_posts_output(mocker):
+    client = VerdantClient(api_key="vd_live_x")
 
     captured = {}
     final = mocker.MagicMock(name="final_result")
@@ -65,7 +28,6 @@ async def test_wrap_remote_analysis_runs_fn_locally_and_posts_output(mocker):
         my_model,
         context_type=ContextType.hiring,
         input_text="q",
-        remote_analysis=True,
         contents="q",
     )
 
@@ -80,20 +42,57 @@ async def test_wrap_remote_analysis_runs_fn_locally_and_posts_output(mocker):
 
 
 @pytest.mark.asyncio
-async def test_wrap_remote_analysis_requires_hosted():
-    # Explicitly clear the (now baked-in) URL so the client is not hosted.
-    client = VerdantClient(settings=Settings(verdant_api_key="vd_live_x", verdant_api_url=""))
+async def test_run_posts_to_pipeline_run(mocker):
+    client = VerdantClient(api_key="vd_live_x")
+    mocker.patch.object(client, "_post_pipeline", new=mocker.AsyncMock(return_value="RESULT"))
+
+    result = await client.run(context_type=ContextType.hiring, input_text="q")
+
+    client._post_pipeline.assert_awaited_once()
+    path, payload = client._post_pipeline.await_args.args
+    assert path == "/pipeline/run"
+    assert payload["context_type"] == "hiring"
+    assert payload["input_text"] == "q"
+    assert result == "RESULT"
+
+
+@pytest.mark.asyncio
+async def test_wrap_requires_key():
+    client = VerdantClient(settings=Settings(verdant_api_key=""))
     with pytest.raises(VerdantAPIError):
-        await client.wrap(
-            lambda **k: "x",
-            context_type="hiring",
-            input_text="q",
-            remote_analysis=True,
-        )
+        await client.wrap(lambda **k: "x", context_type="hiring", input_text="q")
+
+
+@pytest.mark.asyncio
+async def test_run_requires_key():
+    client = VerdantClient(settings=Settings(verdant_api_key=""))
+    with pytest.raises(VerdantAPIError):
+        await client.run(context_type="hiring", input_text="q")
 
 
 def test_default_api_url_is_baked_in():
-    # A key alone is enough to be "hosted" now — no base_url needed.
+    # A key alone is enough — the URL is baked in, no base_url needed.
     client = VerdantClient(api_key="vd_live_x")
     assert client.settings.verdant_api_url  # non-empty default
-    assert client._is_hosted is True
+    assert client.settings.verdant_api_key == "vd_live_x"
+
+
+@pytest.mark.asyncio
+async def test_wrap_keeps_app_up_when_fn_raises(mocker):
+    client = VerdantClient(api_key="vd_live_x")
+    captured = {}
+
+    async def fake_post(path, payload):
+        captured["payload"] = payload
+        return mocker.MagicMock(model_copy=mocker.MagicMock(return_value="ok"))
+
+    mocker.patch.object(client, "_post_pipeline", new=mocker.AsyncMock(side_effect=fake_post))
+
+    def boom(**kwargs):
+        raise RuntimeError("model exploded")
+
+    result = await client.wrap(boom, context_type="hiring", input_text="q")
+
+    # The error is captured and still sent for analysis; the app doesn't crash.
+    assert "model exploded" in captured["payload"]["output_text"]
+    assert result == "ok"

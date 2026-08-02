@@ -23,13 +23,9 @@ print(result.audit)         # Full reasoning chain JSON`;
 
 const hostedSample = String.raw`from verdant import VerdantClient
 
-# Point the SDK at your VERDANT deployment. Provider keys (Claude, Gemini)
-# live server-side — managed from the dashboard Settings page — so all you
-# need locally is your VERDANT key.
-client = VerdantClient(
-    api_key="vd_live_...",
-    base_url="https://verdant-be.onrender.com",   # or set VERDANT_API_URL
-)
+# Just your VERDANT key. Provider keys (Claude, Gemini) live server-side —
+# managed from the dashboard Settings page.
+client = VerdantClient(api_key="vd_live_...")
 
 # run() executes the pipeline on the hosted API over HTTP and returns the
 # same result object as wrap().
@@ -192,27 +188,17 @@ curl https://verdant-be.onrender.com/reports/ndpr?days=30 \
 curl -X POST "https://verdant-be.onrender.com/webhooks/dispatch?audit_id=550e8400-...&force=true" \
   -H "Authorization: Bearer vd_live_..."`;
 
-const envVars = `# Your VERDANT API key — from the dashboard: Settings → API keys
+const envVars = `# Your VERDANT API key — from the dashboard: Settings → API keys.
+# This is all the SDK needs.
 VERDANT_API_KEY=vd_live_...
 
-# Optional — override the hosted API URL (defaults to the VERDANT cloud)
-# VERDANT_API_URL=https://verdant-be.onrender.com
-
-# Only needed for fully local, in-process wrap(). In hosted and hybrid modes
-# these live in the dashboard (Settings → Provider Keys), not in your app.
-ANTHROPIC_API_KEY=sk-ant-...
-GEMINI_API_KEY=AIza...`;
+# Provider keys (Claude, Gemini) are NOT set here — they live in the
+# dashboard (Settings → Provider Keys) and are used server-side.`;
 
 const configSample = `from verdant import VerdantClient
 
-# Hosted by default — just pass your key.
-client = VerdantClient(api_key="vd_live_...")
-
-# Or point at a specific / self-hosted deployment:
-client = VerdantClient(
-    api_key="vd_live_...",
-    base_url="https://verdant-be.onrender.com",
-)`;
+# Just pass your key — that's it.
+client = VerdantClient(api_key="vd_live_...")`;
 
 const contextTypes = [
   { type: "hiring", desc: "Recruitment, candidate evaluation, job screening.", aliases: "—" },
@@ -238,7 +224,7 @@ const auditFields = [
 
 const apiEndpoints = [
   { method: "POST", path: "/pipeline/run", desc: "Generate an output for the input and run the 5-stage pipeline. Returns full audit payload with trust score, flags, and explanation." },
-  { method: "POST", path: "/pipeline/analyze", desc: "Analyze an output you already produced (input_text + output_text). Runs the pipeline stages server-side without re-generating. Powers hybrid wrap()." },
+  { method: "POST", path: "/pipeline/analyze", desc: "Analyze an output you already produced (input_text + output_text). Runs the pipeline stages server-side without re-generating. Powers wrap()." },
   { method: "GET", path: "/audits", desc: "List audit logs with pagination. Supports filtering by context_type. Query params: limit, offset, context_type." },
   { method: "GET", path: "/audits/{audit_id}", desc: "Retrieve a single audit record by ID. Returns the full stage breakdown and metadata." },
   { method: "GET", path: "/reports/ndpr", desc: "Generate an NDPR compliance report. Aggregates trust scores, flag counts, and context breakdown. Query param: days (default 30)." },
@@ -520,10 +506,11 @@ export default function DocsPage() {
                   Quick start
                 </h2>
                 <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-                  Wrap your existing AI call. VERDANT intercepts the request,
-                  runs the 5-stage pipeline, and returns the clean output
-                  alongside a full audit payload. This runs the pipeline{" "}
-                  <strong>in-process</strong> using your provider keys.
+                  Wrap your existing AI call. Your model runs where it always
+                  has; VERDANT runs the 5-stage pipeline on its output and
+                  returns the clean result alongside a full audit payload. Your{" "}
+                  <strong>VERDANT key is all you need</strong> — provider keys
+                  live in the dashboard.
                 </p>
                 <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
                   <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
@@ -546,30 +533,12 @@ export default function DocsPage() {
                   Hosted mode (SaaS)
                 </h2>
                 <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-                  Set{" "}
+                  The SDK always talks to the hosted VERDANT API — your{" "}
                   <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
-                    base_url
+                    VERDANT_API_KEY
                   </code>{" "}
-                  (or the{" "}
-                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
-                    VERDANT_API_URL
-                  </code>{" "}
-                  env var) and the SDK runs the pipeline on your VERDANT
-                  deployment over HTTP via{" "}
-                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
-                    client.run()
-                  </code>
-                  . Provider keys (Claude, Gemini) stay server-side — managed
-                  from the dashboard — so your app only carries a VERDANT key.
-                  Leave{" "}
-                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
-                    base_url
-                  </code>{" "}
-                  unset to run in-process with{" "}
-                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
-                    wrap()
-                  </code>
-                  .
+                  is all you need. Provider keys (Claude, Gemini) stay
+                  server-side, managed from the dashboard.
                 </p>
                 <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
                   <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
@@ -584,35 +553,25 @@ export default function DocsPage() {
                     <code>{hostedSample}</code>
                   </pre>
                 </div>
-                <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
                   <div className="rounded-lg border border-rose-950/10 bg-white p-5 dark:border-white/10 dark:bg-white/5">
                     <p className="font-semibold text-slate-900 dark:text-white">
-                      wrap() — in-process
+                      run() — VERDANT does everything
                     </p>
                     <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                      Runs the pipeline in your own process and wraps a local
-                      callable. You supply the provider keys. Best for local
-                      development and self-hosted workloads.
+                      Send the input; the server generates the output, runs the
+                      full pipeline with dashboard-managed provider keys, and logs
+                      the audit. The simplest setup.
                     </p>
                   </div>
                   <div className="rounded-lg border border-rose-950/10 bg-white p-5 dark:border-white/10 dark:bg-white/5">
                     <p className="font-semibold text-slate-900 dark:text-white">
-                      run() — hosted
+                      wrap(fn=…) — call your own model
                     </p>
                     <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                      Sends the input to your VERDANT API, which generates and
-                      analyses the output with server-side provider keys and logs
-                      the audit to the dashboard.
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-rose-950/10 bg-white p-5 dark:border-white/10 dark:bg-white/5">
-                    <p className="font-semibold text-slate-900 dark:text-white">
-                      wrap(remote_analysis=True) — hybrid
-                    </p>
-                    <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                      Runs your own model call locally, then analyses the output
-                      on the server with dashboard-managed keys — so you keep your
-                      call but need no local provider keys.
+                      Your model call runs locally (keep custom prompts,
+                      streaming, or a provider VERDANT doesn&apos;t host); its
+                      output is scored on the server. Still just your VERDANT key.
                     </p>
                   </div>
                 </div>
@@ -1132,8 +1091,7 @@ export default function DocsPage() {
                   Environment variables
                 </h2>
                 <p className="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-                  These are the only variables the SDK reads. In hosted and
-                  hybrid mode you just need your{" "}
+                  These are the only variables the SDK reads. You just need your{" "}
                   <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
                     VERDANT_API_KEY
                   </code>{" "}
@@ -1159,12 +1117,8 @@ export default function DocsPage() {
                   <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
                     VERDANT_API_KEY
                   </code>{" "}
-                  (and optional{" "}
-                  <code className="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-white/10">
-                    VERDANT_API_URL
-                  </code>
-                  ) from the environment, or you can pass them as constructor
-                  arguments.
+                  from the environment, or you can pass it as a constructor
+                  argument.
                 </p>
                 <div className="mt-4 overflow-hidden rounded-lg border border-rose-950/10 bg-slate-950 dark:border-white/10">
                   <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
