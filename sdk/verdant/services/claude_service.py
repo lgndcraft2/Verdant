@@ -26,10 +26,9 @@ class _GeneratedCompletion(BaseModel):
 
 
 class ClaudeService:
-    model_name = "claude-sonnet-4-6"
-
     def __init__(self, settings: Settings | None = None, *, db_service: "DBService | None" = None) -> None:
         self.settings = settings or get_settings()
+        self.model_name = self.settings.claude_model
         self._client = None
         self._db_service = db_service
         self._prompts_dir = Path(__file__).resolve().parent / "prompts"

@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 class GeminiService:
     def __init__(self, settings: Settings | None = None, *, db_service: "DBService | None" = None) -> None:
         self.settings = settings or get_settings()
+        self.model_name = self.settings.gemini_model
         self._client = None
         self._db_service = db_service
         self._prompts_dir = Path(__file__).resolve().parent / "prompts"
@@ -81,7 +82,7 @@ class GeminiService:
 
         def _run() -> str:
             model = self._client.GenerativeModel(
-                model_name=self.settings.gemini_model,
+                model_name=self.model_name,
                 system_instruction=system_prompt,
             )
             response = model.generate_content(

@@ -129,7 +129,8 @@ class VerdantPipeline:
         intent: IntentStageOutput,
         baseline: BaselineStageOutput,
         metadata: dict[str, Any],
-    ) -> str:
+    ) -> tuple[str, str]:
+        """Generate the upstream output and return ``(output_text, model_name)``."""
         prompt = (
             "Respond helpfully to the user's request and return JSON only.\n\n"
             f"Context type: {intent.context_type.value}\n"
@@ -140,12 +141,12 @@ class VerdantPipeline:
         )
 
         try:
-            return await self.claude_service.generate_text("generate", prompt)
+            return await self.claude_service.generate_text("generate", prompt), self.claude_service.model_name
         except Exception as exc:
             logger.warning("Claude default generation failed, falling back to Gemini: %s", exc)
 
         try:
-            return await self.gemini_service.generate_text("generate", prompt)
+            return await self.gemini_service.generate_text("generate", prompt), self.gemini_service.model_name
         except Exception as exc:
             logger.error("Gemini default generation failed and echo fallback is disabled: %s", exc)
             raise ProviderUnavailableError(
@@ -187,16 +188,23 @@ class VerdantPipeline:
         pipeline_error: str | None = None
         raw_output: Any
         clean_output: Any
+        # The model behind the *output* (None until known / on failure).
+        output_model_name: str | None = None
 
         if precomputed_output is not None:
             # Caller already produced the output (e.g. hybrid wrap: the model was
             # called client-side); we only run the analysis stages on it here.
             raw_output = precomputed_output
             clean_output = precomputed_output
+            output_model_name = "client-supplied"
         elif fn is None:
             try:
-                raw_output = await self._generate_default_output(resolved_input_text, intent, baseline, metadata)
+                raw_output, output_model_name = await self._generate_default_output(
+                    resolved_input_text, intent, baseline, metadata
+                )
                 clean_output = raw_output
+            except ProviderUnavailableError:
+                raise
             except Exception as exc:  # pragma: no cover - catch-all guard
                 logger.exception("Default generation failed unexpectedly: %s", exc)
                 raw_output = {"error": str(exc)}
@@ -206,6 +214,7 @@ class VerdantPipeline:
             try:
                 raw_output = await _call_target(fn, fn_kwargs)
                 clean_output = _json_safe(raw_output)
+                output_model_name = "client-supplied"
             except Exception as exc:
                 logger.warning("Wrapped function raised; continuing with fallback output: %s", exc)
                 raw_output = {"error": str(exc)}
@@ -277,7 +286,7 @@ class VerdantPipeline:
             flags=list(bias.flags),
             explanation=explanation.plain_language_explanation,
             metadata=_json_safe(metadata),
-            model_name=self.settings.claude_model,
+            model_name=output_model_name,
             duration_ms=int((time.perf_counter() - started_at) * 1000),
             error=raw_output.get("error") if isinstance(raw_output, dict) else None,
         )

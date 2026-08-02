@@ -133,7 +133,7 @@ class AuditPayload(VerdantBaseModel):
     flags: list[str] = Field(default_factory=list)
     explanation: str
     metadata: dict[str, Any] = Field(default_factory=dict)
-    model_name: str = "claude-sonnet-4-6"
+    model_name: str | None = None
     duration_ms: int = 0
     error: str | None = None
 

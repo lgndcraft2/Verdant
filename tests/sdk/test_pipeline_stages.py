@@ -116,11 +116,87 @@ async def test_generation_falls_back_to_gemini(mocker):
     claude.generate_text.side_effect = RuntimeError("no claude")
     gemini = mocker.AsyncMock()
     gemini.generate_text.return_value = "gemini answer"
+    gemini.model_name = "gemini-2.5-flash"
 
     pipe = VerdantPipeline(claude_service=claude, gemini_service=gemini)
-    out = await pipe._generate_default_output("hello", _intent(), _baseline(), {})
+    # #3: generation reports which model actually produced the output.
+    out, model = await pipe._generate_default_output("hello", _intent(), _baseline(), {})
     assert out == "gemini answer"
+    assert model == "gemini-2.5-flash"
     gemini.generate_text.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_generation_reports_claude_model(mocker):
+    claude = mocker.AsyncMock()
+    claude.generate_text.return_value = "claude answer"
+    claude.model_name = "claude-sonnet-4-6"
+    gemini = mocker.AsyncMock()
+
+    pipe = VerdantPipeline(claude_service=claude, gemini_service=gemini)
+    out, model = await pipe._generate_default_output("hello", _intent(), _baseline(), {})
+    assert out == "claude answer"
+    assert model == "claude-sonnet-4-6"
+    gemini.generate_text.assert_not_awaited()
+
+
+class _FakeLLM:
+    """Minimal stand-in for Claude/Gemini services for full-pipeline tests."""
+
+    def __init__(self, *, model_name: str, text: str | None = None, text_raises: bool = False):
+        self.model_name = model_name
+        self._text = text
+        self._text_raises = text_raises
+
+    async def generate_json(self, prompt_name, user_prompt, response_model, *, temperature=0.0):
+        if response_model is IntentStageOutput:
+            return _intent()
+        if response_model is ExplainStageOutput:
+            return ExplainStageOutput(plain_language_explanation="e", confidence=0.8)
+        raise AssertionError(f"unexpected response_model {response_model!r}")
+
+    async def generate_text(self, prompt_name, user_prompt, *, temperature=0.0):
+        if self._text_raises:
+            raise RuntimeError("generation unavailable")
+        return self._text
+
+
+def _pipeline_with(mocker, claude, gemini):
+    db = mocker.AsyncMock()
+    db.fetch_baseline.return_value = None          # -> fallback baseline
+    db.fetch_recent_audits.return_value = []       # -> default historical score
+    cache = mocker.AsyncMock()
+    cache.get_baseline.return_value = None          # -> skip cache
+    return VerdantPipeline(claude_service=claude, gemini_service=gemini, db_service=db, cache_service=cache)
+
+
+@pytest.mark.asyncio
+async def test_run_audit_records_actual_generation_model(mocker):
+    # Claude analyses the stages but can't generate; Gemini generates the output.
+    claude = _FakeLLM(model_name="claude-sonnet-4-6", text_raises=True)
+    gemini = _FakeLLM(model_name="gemini-2.5-flash", text="the generated answer")
+    pipe = _pipeline_with(mocker, claude, gemini)
+
+    result = await pipe.run(context_type="hiring", input_text="Evaluate this candidate.")
+
+    assert result.output == "the generated answer"
+    assert result.audit.model_name == "gemini-2.5-flash"  # not the old hardcoded default
+
+
+@pytest.mark.asyncio
+async def test_run_audit_marks_client_supplied_output(mocker):
+    claude = _FakeLLM(model_name="claude-sonnet-4-6")
+    gemini = _FakeLLM(model_name="gemini-2.5-flash")
+    pipe = _pipeline_with(mocker, claude, gemini)
+
+    result = await pipe.run(
+        context_type="hiring",
+        input_text="Evaluate this candidate.",
+        precomputed_output="a client-produced answer",
+    )
+
+    assert result.output == "a client-produced answer"
+    assert result.audit.model_name == "client-supplied"
 
 
 @pytest.mark.asyncio
