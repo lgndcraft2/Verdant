@@ -110,6 +110,27 @@ async def generic_exception_handler(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
+@app.get("/health", tags=["health"])
+async def health(request: Request) -> dict[str, Any]:
+    """Unauthenticated liveness/readiness check for load balancers and uptime monitors.
+
+    Always returns 200 so a transient cache/DB blip doesn't take the service out of
+    rotation; the ``checks`` map reports each dependency's reachability.
+    """
+    checks: dict[str, str] = {}
+    for name, service in (("cache", getattr(request.app.state, "cache", None)),
+                          ("db", getattr(request.app.state, "db", None))):
+        if service is None:
+            checks[name] = "unavailable"
+            continue
+        try:
+            await service.ping()
+            checks[name] = "ok"
+        except Exception:  # best-effort — never fail the health check on a dep blip
+            checks[name] = "error"
+    return {"status": "ok", "version": app.version, "checks": checks}
+
+
 # SDK / programmatic surface — authenticated with a VERDANT API key.
 app.include_router(pipeline_router, dependencies=[Depends(verify_api_key)])
 app.include_router(audit_router, dependencies=[Depends(verify_api_key)])
