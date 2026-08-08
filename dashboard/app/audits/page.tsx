@@ -1,47 +1,9 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { DataNotice, EmptyState } from "@/components/data-notice";
+import { getAudits } from "@/lib/server-api";
+import { auditTitle, formatTimestamp, titleCaseContext } from "@/lib/format";
 
-const audits = [
-  {
-    id: "vd_a7f3c91",
-    title: "Candidate shortlist review",
-    context: "Hiring",
-    score: 84,
-    flag: "proxy_language_detected",
-    note: "Role phrasing may disadvantage candidates outside Lagos. Review qualification language.",
-    model: "gpt-4o",
-    timestamp: "2026-07-07 · 11:31 WAT",
-  },
-  {
-    id: "vd_b2e9d44",
-    title: "Loan pre-approval batch",
-    context: "Lending",
-    score: 61,
-    flag: "geographic_bias",
-    note: "Bias signal above alert threshold. Webhook dispatched to configured endpoint.",
-    model: "claude-sonnet-4-6",
-    timestamp: "2026-07-07 · 11:19 WAT",
-  },
-  {
-    id: "vd_c5f1a77",
-    title: "Moderation queue pass",
-    context: "Content",
-    score: 91,
-    flag: null,
-    note: "Explanation confidence high and consistent across all moderated items.",
-    model: "gpt-4o",
-    timestamp: "2026-07-07 · 11:02 WAT",
-  },
-  {
-    id: "vd_d8a4b12",
-    title: "Symptom triage review",
-    context: "Healthcare",
-    score: 73,
-    flag: "low_confidence",
-    note: "Output below expert-review threshold for healthcare context. Escalation recommended.",
-    model: "claude-sonnet-4-6",
-    timestamp: "2026-07-07 · 10:44 WAT",
-  },
-];
+export const dynamic = "force-dynamic";
 
 function TrustBadge({ score }: { score: number }) {
   const classes =
@@ -67,63 +29,92 @@ const contextColors: Record<string, string> = {
   Healthcare: "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300",
 };
 
-export default function AuditsPage() {
+export default async function AuditsPage() {
+  const result = await getAudits(50, 0);
+
+  const audits = result.ok
+    ? result.data.items.map((a) => ({
+        id: a.id ?? a.audit_id ?? "",
+        title: auditTitle(a.stages?.intent?.detected_intent, a.input_text),
+        context: titleCaseContext(a.context_type),
+        score: a.trust_score ?? 0,
+        flag: a.flags && a.flags.length > 0 ? a.flags.join(", ") : null,
+        note: a.explanation || "No explanation recorded for this decision.",
+        model: a.model_name ?? "—",
+        timestamp: formatTimestamp(a.created_at),
+      }))
+    : [];
+
   return (
     <DashboardShell>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
-            Audit explorer
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Review decisions by score, context type, and explanation quality
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
+              Audit explorer
+            </h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Review decisions by score, context type, and explanation quality
+            </p>
+          </div>
+          {result.ok && (
+            <span className="self-start rounded-lg border border-rose-950/10 bg-white px-3 py-2 text-xs font-medium text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
+              {result.data.total.toLocaleString()} total · showing {audits.length}
+            </span>
+          )}
         </div>
+
+        {!result.ok && <DataNotice result={result} />}
+        {result.ok && audits.length === 0 && (
+          <EmptyState message="No audits yet — run a decision through the SDK (client.run / client.wrap) and it will appear here." />
+        )}
 
         {/* Audit list */}
-        <div className="space-y-3">
-          {audits.map((audit) => (
-            <article
-              key={audit.id}
-              className="rounded-lg border border-rose-950/10 bg-white shadow-sm dark:border-white/10 dark:bg-white/5"
-            >
-              <div className="flex flex-col gap-4 p-5 md:flex-row md:items-start">
-                <div className="flex flex-1 min-w-0 items-start gap-4">
-                  <TrustBadge score={audit.score} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${contextColors[audit.context]}`}
-                      >
-                        {audit.context}
-                      </span>
-                      <h2 className="font-display text-lg font-semibold text-slate-950 dark:text-white">
-                        {audit.title}
-                      </h2>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                      {audit.note}
-                    </p>
-                    {audit.flag && (
-                      <p className="mt-2 font-mono text-xs font-medium text-rose-600 dark:text-rose-400">
-                        ⚠ {audit.flag}
+        {audits.length > 0 && (
+          <div className="space-y-3">
+            {audits.map((audit) => (
+              <article
+                key={audit.id}
+                className="rounded-lg border border-rose-950/10 bg-white shadow-sm dark:border-white/10 dark:bg-white/5"
+              >
+                <div className="flex flex-col gap-4 p-5 md:flex-row md:items-start">
+                  <div className="flex flex-1 min-w-0 items-start gap-4">
+                    <TrustBadge score={audit.score} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${contextColors[audit.context] ?? "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300"}`}
+                        >
+                          {audit.context}
+                        </span>
+                        <h2 className="font-display text-lg font-semibold text-slate-950 dark:text-white">
+                          {audit.title}
+                        </h2>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        {audit.note}
                       </p>
-                    )}
+                      {audit.flag && (
+                        <p className="mt-2 font-mono text-xs font-medium text-rose-600 dark:text-rose-400">
+                          ⚠ {audit.flag}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-4 md:flex-col md:items-end md:gap-1.5">
+                    <p className="font-mono text-xs text-slate-400">{audit.id.slice(0, 10)}</p>
+                    <p className="text-xs text-slate-400">{audit.timestamp}</p>
+                    <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500 dark:bg-white/10 dark:text-slate-400">
+                      {audit.model}
+                    </span>
                   </div>
                 </div>
-
-                <div className="flex shrink-0 items-center gap-4 md:flex-col md:items-end md:gap-1.5">
-                  <p className="font-mono text-xs text-slate-400">{audit.id}</p>
-                  <p className="text-xs text-slate-400">{audit.timestamp}</p>
-                  <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500 dark:bg-white/10 dark:text-slate-400">
-                    {audit.model}
-                  </span>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
     </DashboardShell>
   );

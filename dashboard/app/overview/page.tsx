@@ -1,79 +1,10 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { DataNotice, EmptyState } from "@/components/data-notice";
 import { CheckIcon, PulseIcon, ShieldIcon, TraceIcon } from "@/components/icons";
+import { getAudits, getNdprReport } from "@/lib/server-api";
+import { auditTitle, relativeTime, titleCaseContext } from "@/lib/format";
 
-const stats = [
-  {
-    label: "Avg trust score",
-    value: "82",
-    unit: "/100",
-    trend: "+3 vs last week",
-    positive: true,
-  },
-  {
-    label: "Total audits (7d)",
-    value: "1,247",
-    unit: "",
-    trend: "+18% vs prior week",
-    positive: true,
-  },
-  {
-    label: "Flagged outputs",
-    value: "38",
-    unit: "",
-    trend: "3.0% flag rate",
-    positive: false,
-  },
-  {
-    label: "Active contexts",
-    value: "4",
-    unit: "",
-    trend: "Hiring · Lending · Content · Health",
-    positive: null,
-  },
-];
-
-const recentAudits = [
-  {
-    id: "vd_a7f3c91",
-    context: "Hiring",
-    title: "Candidate shortlist review",
-    score: 84,
-    flag: "proxy_language_detected",
-    time: "2 min ago",
-  },
-  {
-    id: "vd_b2e9d44",
-    context: "Lending",
-    title: "Loan pre-approval batch",
-    score: 61,
-    flag: "geographic_bias",
-    time: "14 min ago",
-  },
-  {
-    id: "vd_c5f1a77",
-    context: "Content",
-    title: "Moderation queue pass",
-    score: 91,
-    flag: null,
-    time: "31 min ago",
-  },
-  {
-    id: "vd_d8a4b12",
-    context: "Healthcare",
-    title: "Symptom triage review",
-    score: 73,
-    flag: "low_confidence",
-    time: "1 hr ago",
-  },
-  {
-    id: "vd_e1c7d89",
-    context: "Hiring",
-    title: "Job description bias check",
-    score: 88,
-    flag: null,
-    time: "2 hr ago",
-  },
-];
+export const dynamic = "force-dynamic";
 
 const pipelineStages = [
   { n: "01", label: "Intent extraction", icon: TraceIcon, healthy: true },
@@ -107,7 +38,54 @@ const contextColors: Record<string, string> = {
   Healthcare: "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300",
 };
 
-export default function OverviewPage() {
+export default async function OverviewPage() {
+  const [report, audits] = await Promise.all([getNdprReport(7), getAudits(5, 0)]);
+
+  const stats = report.ok
+    ? [
+        {
+          label: "Avg trust score",
+          value: report.data.average_trust_score != null ? String(report.data.average_trust_score) : "—",
+          unit: report.data.average_trust_score != null ? "/100" : "",
+          trend: `${report.data.total_audits} decisions scored`,
+          positive: null as boolean | null,
+        },
+        {
+          label: "Total audits (7d)",
+          value: report.data.total_audits.toLocaleString(),
+          unit: "",
+          trend: `${report.data.available_audits.toLocaleString()} on record`,
+          positive: null as boolean | null,
+        },
+        {
+          label: "Low-trust decisions (7d)",
+          value: String(report.data.low_trust_decisions),
+          unit: "",
+          trend: "Below alert threshold",
+          positive: report.data.low_trust_decisions === 0 ? true : (false as boolean | null),
+        },
+        {
+          label: "Active contexts",
+          value: String(Object.keys(report.data.by_context_type).length),
+          unit: "",
+          trend:
+            Object.keys(report.data.by_context_type).map(titleCaseContext).join(" · ") || "None yet",
+          positive: null as boolean | null,
+        },
+      ]
+    : [];
+
+  const recent = audits.ok
+    ? audits.data.items.map((a) => ({
+        id: a.id ?? a.audit_id ?? "",
+        context: titleCaseContext(a.context_type),
+        title: auditTitle(a.stages?.intent?.detected_intent, a.input_text),
+        score: a.trust_score ?? 0,
+        flag: a.flags && a.flags.length > 0 ? a.flags[0] : null,
+        time: relativeTime(a.created_at),
+      }))
+    : [];
+
   return (
     <DashboardShell>
       <div className="space-y-8">
@@ -127,38 +105,42 @@ export default function OverviewPage() {
           </div>
         </div>
 
+        {!report.ok && <DataNotice result={report} />}
+
         {/* Stat cards */}
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className="rounded-lg border border-rose-950/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5"
-            >
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                {stat.label}
-              </p>
-              <div className="mt-2 flex items-end gap-1">
-                <p className="font-display text-3xl font-semibold text-slate-950 dark:text-white">
-                  {stat.value}
-                </p>
-                {stat.unit && (
-                  <p className="mb-0.5 text-sm text-slate-400">{stat.unit}</p>
-                )}
-              </div>
-              <p
-                className={`mt-1 text-xs ${
-                  stat.positive === true
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : stat.positive === false
-                    ? "text-rose-600 dark:text-rose-400"
-                    : "text-slate-400"
-                }`}
+        {report.ok && (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {stats.map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-lg border border-rose-950/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5"
               >
-                {stat.trend}
-              </p>
-            </div>
-          ))}
-        </div>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                  {stat.label}
+                </p>
+                <div className="mt-2 flex items-end gap-1">
+                  <p className="font-display text-3xl font-semibold text-slate-950 dark:text-white">
+                    {stat.value}
+                  </p>
+                  {stat.unit && (
+                    <p className="mb-0.5 text-sm text-slate-400">{stat.unit}</p>
+                  )}
+                </div>
+                <p
+                  className={`mt-1 text-xs ${
+                    stat.positive === true
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : stat.positive === false
+                      ? "text-rose-600 dark:text-rose-400"
+                      : "text-slate-400"
+                  }`}
+                >
+                  {stat.trend}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Feed + pipeline health */}
         <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
@@ -175,31 +157,41 @@ export default function OverviewPage() {
                 View all →
               </a>
             </div>
-            <div className="divide-y divide-rose-950/5 dark:divide-white/5">
-              {recentAudits.map((audit) => (
-                <div key={audit.id} className="flex items-center gap-4 px-5 py-3.5">
-                  <TrustBadge score={audit.score} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${contextColors[audit.context]}`}
-                      >
-                        {audit.context}
-                      </span>
-                      <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
-                        {audit.title}
-                      </p>
+            {recent.length > 0 ? (
+              <div className="divide-y divide-rose-950/5 dark:divide-white/5">
+                {recent.map((audit) => (
+                  <div key={audit.id} className="flex items-center gap-4 px-5 py-3.5">
+                    <TrustBadge score={audit.score} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${contextColors[audit.context] ?? "bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300"}`}
+                        >
+                          {audit.context}
+                        </span>
+                        <p className="truncate text-sm font-medium text-slate-900 dark:text-white">
+                          {audit.title}
+                        </p>
+                      </div>
+                      {audit.flag && (
+                        <p className="mt-0.5 truncate font-mono text-xs text-rose-600 dark:text-rose-400">
+                          {audit.flag}
+                        </p>
+                      )}
                     </div>
-                    {audit.flag && (
-                      <p className="mt-0.5 truncate font-mono text-xs text-rose-600 dark:text-rose-400">
-                        {audit.flag}
-                      </p>
-                    )}
+                    <p className="shrink-0 text-xs text-slate-400">{audit.time}</p>
                   </div>
-                  <p className="shrink-0 text-xs text-slate-400">{audit.time}</p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-5">
+                {audits.ok ? (
+                  <EmptyState message="No audits yet — run a decision through the SDK and it will appear here." />
+                ) : (
+                  <DataNotice result={audits} />
+                )}
+              </div>
+            )}
           </div>
 
           {/* Pipeline health */}

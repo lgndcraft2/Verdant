@@ -1,38 +1,18 @@
-import { ArrowIcon, FileTextIcon } from "@/components/icons";
+import { FileTextIcon } from "@/components/icons";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { DataNotice } from "@/components/data-notice";
+import { getNdprReport } from "@/lib/server-api";
+import { titleCaseContext } from "@/lib/format";
 
-const reports = [
-  {
-    title: "Monthly NDPR export",
-    desc: "Full audit log with context types, trust scores, and explanation quality for the past 30 days.",
-    format: "PDF + JSON",
-    generated: "2026-07-01",
-    status: "ready",
-  },
-  {
-    title: "Bias trend summary",
-    desc: "Flag frequency and pattern trends by context type, model version, and time window.",
-    format: "CSV + PDF",
-    generated: "2026-07-05",
-    status: "ready",
-  },
-  {
-    title: "Model version comparison",
-    desc: "Trust score distributions and bias flag rates across model versions used in this deployment.",
-    format: "PDF",
-    generated: "2026-07-06",
-    status: "processing",
-  },
-];
+export const dynamic = "force-dynamic";
 
-const statusClasses: Record<string, string> = {
-  ready:
-    "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
-  processing:
-    "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-};
+export default async function ReportsPage() {
+  const result = await getNdprReport(30);
+  const report = result.ok ? result.data : null;
 
-export default function ReportsPage() {
+  const contexts = report ? Object.entries(report.by_context_type) : [];
+  const flags = report ? Object.entries(report.flag_counts) : [];
+
   return (
     <DashboardShell>
       <div className="space-y-6">
@@ -43,56 +23,111 @@ export default function ReportsPage() {
               Reports
             </h1>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Export NDPR-ready compliance summaries for stakeholders
+              Export NDPR-ready compliance summaries for stakeholders · last 30 days
             </p>
           </div>
-          <button className="inline-flex min-h-10 items-center gap-2 self-start rounded-lg bg-rose-700 px-4 py-2.5 text-sm font-semibold text-white transition-transform duration-300 hover:-translate-y-0.5 hover:bg-rose-800">
-            Generate report
-          </button>
+          {report && (
+            <a
+              href="/api/reports/ndpr?days=30"
+              className="inline-flex min-h-10 items-center gap-2 self-start rounded-lg bg-rose-700 px-4 py-2.5 text-sm font-semibold text-white transition-transform duration-300 hover:-translate-y-0.5 hover:bg-rose-800"
+            >
+              <FileTextIcon className="h-4 w-4" aria-hidden="true" />
+              Export NDPR report (JSON)
+            </a>
+          )}
         </div>
 
-        {/* Report cards */}
-        <div className="grid gap-4 md:grid-cols-3">
-          {reports.map((report) => (
-            <div
-              key={report.title}
-              className="flex flex-col rounded-lg border border-rose-950/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400">
-                  <FileTextIcon className="h-5 w-5" aria-hidden="true" />
-                </div>
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[report.status]}`}
+        {!result.ok && <DataNotice result={result} />}
+
+        {report && (
+          <>
+            {/* Live summary tiles */}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                {
+                  label: "Audits in window",
+                  value: report.total_audits.toLocaleString(),
+                  sub: `${report.available_audits.toLocaleString()} on record`,
+                },
+                {
+                  label: "Average trust score",
+                  value: report.average_trust_score != null ? `${report.average_trust_score}` : "—",
+                  sub: report.average_trust_score != null ? "out of 100" : "no data yet",
+                },
+                {
+                  label: "Low-trust decisions",
+                  value: report.low_trust_decisions.toLocaleString(),
+                  sub: "below alert threshold",
+                },
+                {
+                  label: "Distinct bias flags",
+                  value: flags.length.toLocaleString(),
+                  sub: `${flags.reduce((n, [, c]) => n + c, 0)} occurrences`,
+                },
+              ].map((tile) => (
+                <div
+                  key={tile.label}
+                  className="rounded-lg border border-rose-950/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5"
                 >
-                  {report.status}
-                </span>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{tile.label}</p>
+                  <p className="mt-2 font-display text-3xl font-semibold text-slate-950 dark:text-white">
+                    {tile.value}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">{tile.sub}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Breakdown cards */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-lg border border-rose-950/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400">
+                    <FileTextIcon className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <h2 className="font-display text-lg font-semibold text-slate-950 dark:text-white">
+                    Decisions by context
+                  </h2>
+                </div>
+                <div className="mt-4 space-y-2">
+                  {contexts.length > 0 ? (
+                    contexts.map(([ctx, count]) => (
+                      <div key={ctx} className="flex items-center justify-between text-sm">
+                        <span className="text-slate-600 dark:text-slate-300">{titleCaseContext(ctx)}</span>
+                        <span className="font-mono text-slate-900 dark:text-white">{count}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-400">No decisions recorded in this window yet.</p>
+                  )}
+                </div>
               </div>
 
-              <h2 className="mt-4 font-display text-lg font-semibold text-slate-950 dark:text-white">
-                {report.title}
-              </h2>
-              <p className="mt-2 flex-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                {report.desc}
-              </p>
-
-              <div className="mt-4 flex items-center justify-between border-t border-rose-950/10 pt-4 dark:border-white/10">
-                <div className="space-y-0.5">
-                  <p className="text-xs text-slate-400">Format: {report.format}</p>
-                  <p className="text-xs text-slate-400">
-                    Generated: {report.generated}
-                  </p>
+              <div className="rounded-lg border border-rose-950/10 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400">
+                    <FileTextIcon className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <h2 className="font-display text-lg font-semibold text-slate-950 dark:text-white">
+                    Top bias flags
+                  </h2>
                 </div>
-                {report.status === "ready" && (
-                  <button className="inline-flex items-center gap-1.5 text-sm font-medium text-rose-700 transition-colors hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300">
-                    Download
-                    <ArrowIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                )}
+                <div className="mt-4 space-y-2">
+                  {flags.length > 0 ? (
+                    flags.slice(0, 6).map(([flag, count]) => (
+                      <div key={flag} className="flex items-center justify-between text-sm">
+                        <span className="font-mono text-rose-600 dark:text-rose-400">{flag}</span>
+                        <span className="font-mono text-slate-900 dark:text-white">{count}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-400">No bias flags raised in this window — clean run.</p>
+                  )}
+                </div>
               </div>
             </div>
-          ))}
-        </div>
+          </>
+        )}
 
         {/* NDPR info panel */}
         <div className="rounded-lg border border-rose-950/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/5">
@@ -103,10 +138,10 @@ export default function ReportsPage() {
             Every report is audit-ready.
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-300">
-            VERDANT exports include timestamps, context types, trust scores,
-            bias flags, and the plain-language explanations generated for each
-            decision. Each report meets the documentation requirements under the
-            Nigeria Data Protection Regulation.
+            VERDANT exports include timestamps, context types, trust scores, bias
+            flags, and the plain-language explanations generated for each decision.
+            Each report meets the documentation requirements under the Nigeria Data
+            Protection Regulation.
           </p>
         </div>
       </div>

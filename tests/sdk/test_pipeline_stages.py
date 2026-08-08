@@ -58,6 +58,42 @@ async def test_bias_patterns():
 
 
 @pytest.mark.asyncio
+async def test_regional_bias_detection():
+    intent = _intent()
+    baseline = _baseline()
+
+    # Explicit state-based exclusion
+    b1 = await match_bias_patterns(
+        "Loan decision", "Reject all applicants from Kano for this facility.",
+        intent=intent, baseline=baseline,
+    )
+    assert "regional_exclusion" in b1.matched_patterns
+    assert b1.severity in (BiasSeverity.high, BiasSeverity.critical)
+
+    # Region-as-risk, reversed word order
+    b2 = await match_bias_patterns(
+        "q", "Applicants from the Northern states should be treated as high risk.",
+        intent=intent, baseline=baseline,
+    )
+    assert "regional_exclusion" in b2.matched_patterns
+
+    # Using origin itself as a factor -> medium proxy flag
+    b3 = await match_bias_patterns(
+        "q", "Score candidates partly on their state of origin.",
+        intent=intent, baseline=baseline,
+    )
+    assert "origin_proxy" in b3.matched_patterns
+
+    # Benign geographic mention -> must NOT flag (no adverse decision nearby)
+    b4 = await match_bias_patterns(
+        "q", "The candidate from Lagos has five years of relevant experience.",
+        intent=intent, baseline=baseline,
+    )
+    assert "regional_exclusion" not in b4.matched_patterns
+    assert "origin_proxy" not in b4.matched_patterns
+
+
+@pytest.mark.asyncio
 async def test_intent_raises_when_no_provider(mocker):
     # Heuristics are gone: if both models fail, intent must fail loudly.
     claude = mocker.AsyncMock()
