@@ -2,8 +2,11 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { ApiKeysForm } from "@/components/api-keys-form";
 import { ProviderKeysForm } from "@/components/provider-keys-form";
 import { signOut } from "@/app/auth/actions";
+import { serverGet } from "@/lib/server-api";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const session = await serverGet<{ role: string }>("/auth/me");
+  const isAdmin = session.ok && session.data.role === "admin";
   return (
     <DashboardShell>
       <div className="space-y-6">
@@ -81,7 +84,7 @@ export default function SettingsPage() {
           </section>
 
           {/* Provider Keys */}
-          <ProviderKeysForm />
+          {isAdmin && <ProviderKeysForm />}
 
           {/* Account */}
           <section className="rounded-lg border border-rose-950/10 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-white/5">

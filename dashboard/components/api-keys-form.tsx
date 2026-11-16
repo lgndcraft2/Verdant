@@ -28,7 +28,7 @@ export function ApiKeysForm() {
 
   const loadKeys = () =>
     getAuthHeader()
-      .then((headers) => fetchWithTimeout(`${API_URL}/keys`, { headers }))
+      .then((headers) => fetchWithTimeout('/api/backend/keys', { headers }))
       .then((res) => res.json())
       .then((json) => {
         if (Array.isArray(json.data)) setKeys(json.data)
@@ -48,7 +48,7 @@ export function ApiKeysForm() {
     setCopied(false)
     try {
       const authHeader = await getAuthHeader()
-      const res = await fetchWithTimeout(`${API_URL}${path}`, {
+      const res = await fetchWithTimeout(`/api/backend${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader },
         body: JSON.stringify({}),

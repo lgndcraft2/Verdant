@@ -163,6 +163,7 @@ class VerdantPipeline:
         fn_kwargs: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
         precomputed_output: Any | None = None,
+        owner_id: str | None = None,
     ) -> WrapResult:
         started_at = time.perf_counter()
         metadata = metadata or {}
@@ -245,6 +246,7 @@ class VerdantPipeline:
             explanation=explanation,
             settings=self.settings,
             db_service=self.db_service,
+            owner_id=owner_id,
         )
 
         if pipeline_error:

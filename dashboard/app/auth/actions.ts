@@ -1,10 +1,9 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 export async function signOut() {
-  const supabase = createClient();
-  await supabase.auth.signOut();
+  cookies().delete("verdant_session");
   redirect("/");
 }

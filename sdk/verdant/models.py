@@ -72,7 +72,7 @@ class BaselineStageOutput(VerdantBaseModel):
     baseline_summary: str
     policy_notes: list[str] = Field(default_factory=list)
     baseline_data: dict[str, Any] = Field(default_factory=dict)
-    source: str = "supabase"
+    source: str = "neon"
     confidence: float = Field(ge=0.0, le=1.0)
 
 

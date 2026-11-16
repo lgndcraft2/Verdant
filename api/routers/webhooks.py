@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from api.auth import verify_api_key
 
 from sdk.verdant.models import AuditPayload
 
@@ -23,13 +24,13 @@ def _sign_payload(secret: str, payload: bytes) -> str:
     return f"sha256={digest}"
 
 
-async def dispatch_low_trust_webhooks(app, audit: AuditPayload | dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+async def dispatch_low_trust_webhooks(app, audit: AuditPayload | dict[str, Any], *, owner_id: str, force: bool = False) -> dict[str, Any]:
     settings = app.state.settings
     db = app.state.db
     audit_payload = audit.model_dump(mode="json") if isinstance(audit, AuditPayload) else audit
     trust_score = int(audit_payload.get("trust_score", 0))
 
-    webhook_configs = await db.fetch_webhook_configs(active_only=True)
+    webhook_configs = await db.fetch_webhook_configs(active_only=True, owner_id=owner_id)
     if not webhook_configs:
         return {"sent": 0, "failed": 0, "skipped": 0, "reason": "no_webhooks_configured"}
 
@@ -72,16 +73,19 @@ async def dispatch_low_trust_webhooks(app, audit: AuditPayload | dict[str, Any],
 
 
 @router.post("/webhooks/dispatch")
-async def dispatch_webhooks(request: Request, audit_id: str | None = None, force: bool = False) -> dict[str, Any]:
+async def dispatch_webhooks(request: Request, audit_id: str | None = None, force: bool = False, key: dict = Depends(verify_api_key)) -> dict[str, Any]:
     if not audit_id and not force:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="audit_id is required unless force=true")
 
     db = request.app.state.db
     audit = None
     if audit_id:
-        audit = await db.get_audit(audit_id)
+        try:
+            audit = await db.get_audit(audit_id, str(key["owner_id"]))
+        except ValueError:
+            audit = None
         if not audit:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audit not found")
 
-    result = await dispatch_low_trust_webhooks(request.app, audit or {}, force=force)
+    result = await dispatch_low_trust_webhooks(request.app, audit or {}, owner_id=str(key["owner_id"]), force=force)
     return _envelope(data=result, meta={"audit_id": audit_id, "force": force})

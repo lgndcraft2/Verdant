@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from api.auth import verify_api_key
 
 from api.routers.webhooks import dispatch_low_trust_webhooks
 from sdk.verdant.errors import ProviderUnavailableError
@@ -15,19 +16,19 @@ def _envelope(data: Any = None, meta: dict[str, Any] | None = None, error: dict[
     return {"data": data, "meta": meta or {}, "error": error}
 
 
-async def _finalize(request: Request, result: WrapResult) -> dict[str, Any]:
+async def _finalize(request: Request, result: WrapResult, owner_id: str) -> dict[str, Any]:
     """Persist the audit, fire low-trust webhooks, and build the response envelope."""
     db = request.app.state.db
     settings = request.app.state.settings
 
-    stored_audit = await db.insert_audit_log(result.audit)
+    stored_audit = await db.insert_audit_log(result.audit, owner_id)
     audit_id = stored_audit.get("id") or stored_audit.get("audit_id")
     if audit_id:
         result = result.model_copy(update={"audit": result.audit.model_copy(update={"audit_id": audit_id})})
 
     webhook_result = None
     if result.trust_score < settings.trust_score_alert_threshold:
-        webhook_result = await dispatch_low_trust_webhooks(request.app, result.audit)
+        webhook_result = await dispatch_low_trust_webhooks(request.app, result.audit, owner_id=owner_id)
 
     meta = {
         "audit_id": str(audit_id) if audit_id else None,
@@ -38,7 +39,7 @@ async def _finalize(request: Request, result: WrapResult) -> dict[str, Any]:
 
 
 @router.post("/pipeline/run")
-async def run_pipeline(request: Request, body: PipelineRunRequest) -> dict[str, Any]:
+async def run_pipeline(request: Request, body: PipelineRunRequest, key: dict = Depends(verify_api_key)) -> dict[str, Any]:
     """Generate an output for the input and run the full reasoning pipeline."""
     pipeline = request.app.state.pipeline
     try:
@@ -46,16 +47,17 @@ async def run_pipeline(request: Request, body: PipelineRunRequest) -> dict[str, 
             context_type=body.context_type,
             input_text=body.input_text,
             metadata=body.metadata,
+            owner_id=str(key["owner_id"]),
         )
-        return await _finalize(request, result)
+        return await _finalize(request, result, str(key["owner_id"]))
     except ProviderUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Pipeline failed")
 
 
 @router.post("/pipeline/analyze")
-async def analyze_pipeline(request: Request, body: PipelineAnalyzeRequest) -> dict[str, Any]:
+async def analyze_pipeline(request: Request, body: PipelineAnalyzeRequest, key: dict = Depends(verify_api_key)) -> dict[str, Any]:
     """Run the reasoning stages on an output the caller already produced.
 
     Used by hybrid wrap: the model is called client-side, and the resulting
@@ -68,9 +70,10 @@ async def analyze_pipeline(request: Request, body: PipelineAnalyzeRequest) -> di
             input_text=body.input_text,
             precomputed_output=body.output_text,
             metadata=body.metadata,
+            owner_id=str(key["owner_id"]),
         )
-        return await _finalize(request, result)
+        return await _finalize(request, result, str(key["owner_id"]))
     except ProviderUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Pipeline failed")

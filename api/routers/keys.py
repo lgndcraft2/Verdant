@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from api.auth import generate_api_key, verify_supabase_jwt
+from api.auth import generate_api_key, verify_session
 
 router = APIRouter(tags=["keys"])
 
@@ -30,7 +30,7 @@ async def _issue_key(request: Request, user: dict[str, Any], label: str | None) 
     db = request.app.state.db
     stored = await db.create_api_key(
         {
-            "user_id": user["user_id"],
+            "owner_id": user["user_id"],
             "key_prefix": key_prefix,
             "hashed_key": hashed_key,
             "label": label or "Default key",
@@ -44,7 +44,7 @@ async def _issue_key(request: Request, user: dict[str, Any], label: str | None) 
 
 
 @router.get("/keys")
-async def list_keys(request: Request, user: dict[str, Any] = Depends(verify_supabase_jwt)) -> dict[str, Any]:
+async def list_keys(request: Request, user: dict[str, Any] = Depends(verify_session)) -> dict[str, Any]:
     """List the caller's active VERDANT API keys (prefixes and metadata only)."""
     db = request.app.state.db
     keys = await db.list_api_keys(user["user_id"])
@@ -55,7 +55,7 @@ async def list_keys(request: Request, user: dict[str, Any] = Depends(verify_supa
 async def create_key(
     request: Request,
     body: ApiKeyCreate | None = None,
-    user: dict[str, Any] = Depends(verify_supabase_jwt),
+    user: dict[str, Any] = Depends(verify_session),
 ) -> dict[str, Any]:
     """Issue a new VERDANT API key. The raw key is returned exactly once."""
     label = body.label if body else None
@@ -66,10 +66,13 @@ async def create_key(
 async def regenerate_key(
     request: Request,
     body: ApiKeyCreate | None = None,
-    user: dict[str, Any] = Depends(verify_supabase_jwt),
+    user: dict[str, Any] = Depends(verify_session),
 ) -> dict[str, Any]:
     """Revoke the caller's existing keys and issue a fresh one (returned once)."""
     db = request.app.state.db
-    await db.revoke_api_keys_for_user(user["user_id"])
-    label = body.label if body else None
-    return await _issue_key(request, user, label)
+    raw_key, key_prefix, hashed_key = generate_api_key()
+    stored = await db.regenerate_api_key(user["user_id"], {
+        "key_prefix": key_prefix, "hashed_key": hashed_key,
+        "label": body.label if body and body.label else "Default key", "scopes": [],
+    })
+    return _envelope(data={"raw_key": raw_key, **_public_key(stored)})

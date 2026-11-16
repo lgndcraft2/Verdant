@@ -746,7 +746,7 @@ export default function DocsPage() {
                     result.audit
                   </code>
                   . This is the full reasoning chain that gets persisted to
-                  Supabase and powers the dashboard.
+                  Neon and powers the dashboard.
                 </p>
                 <div className="mt-6 overflow-hidden rounded-lg border border-rose-950/10 dark:border-white/10">
                   <table className="w-full text-sm">

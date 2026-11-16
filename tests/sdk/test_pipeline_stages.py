@@ -282,3 +282,12 @@ async def test_trust_synthesis(mocker):
     # Total = 97.5 (rounds to 98)
     assert trust.trust_score == 98
     assert trust.risk_level == RiskLevel.low
+
+    high_bias = bias.model_copy(update={"bias_score": 35, "severity": BiasSeverity.high})
+    unsafe = await synthesize_trust_score(
+        intent=intent, baseline=baseline, bias=high_bias,
+        explanation=explanation, db_service=mock_db,
+    )
+    assert unsafe.trust_score <= 39
+    assert unsafe.risk_level == RiskLevel.critical
+    assert unsafe.score_breakdown["composite_before_safety_cap"] > unsafe.trust_score

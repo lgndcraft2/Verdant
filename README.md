@@ -96,7 +96,7 @@ result.explanation   # Plain-language explanation string
 | API | FastAPI |
 | AI — Primary | Anthropic Claude (`claude-sonnet-4-6`) |
 | AI — Secondary | Google Gemini (fallback/cross-validation) |
-| Database | Supabase (PostgreSQL) |
+| Database | Neon (PostgreSQL) |
 | Cache | Redis |
 | Dashboard | Next.js 14 (App Router, TypeScript, Tailwind) |
 
@@ -126,7 +126,7 @@ Baselines are calibrated to **Nigerian demographic realities** — not Western d
 - Gender dynamics in Nigerian professional contexts
 - Linguistic register and code-switching
 
-Baselines are versioned and stored in Supabase. They can be overridden per-client via config.
+Baselines are versioned and stored in Neon. They can be overridden per-client via config.
 
 ---
 
@@ -158,7 +158,7 @@ verdant/
 ├── sdk/              # Python SDK (pip installable)
 ├── api/              # FastAPI backend
 ├── dashboard/        # Next.js frontend
-├── supabase/         # DB migrations and seed data
+├── neon/             # DB schema, seed data, migration scripts
 ├── tests/            # SDK and API tests
 └── docs/             # Documentation
 ```
@@ -180,7 +180,7 @@ python -m pytest tests/ -v
 |---|---|
 | Raheem | Architecture, FastAPI backend|
 | Emafido | Next.js dashboard |
-| Ismail | SDK wrapper, bias logic, Supabase schema |
+| Ismail | SDK wrapper, bias logic, database schema |
 
 ---
 

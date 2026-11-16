@@ -2,8 +2,9 @@ import pytest
 from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
-from api.auth import verify_api_key
+from api.auth import verify_api_key, verify_reader
 from api.main import app
+from sdk.verdant.services.db_service import DBService
 from sdk.verdant.config import Settings
 
 @pytest.fixture
@@ -23,6 +24,7 @@ def mock_db(mocker):
     db.insert_audit_log.return_value = {"id": "vd_test123"}
     db.fetch_webhook_configs.return_value = []
     db.fetch_recent_audits.return_value = []
+    db.report_audits.return_value = []
     return db
 
 @pytest.fixture
@@ -37,10 +39,12 @@ def mock_pipeline(mocker):
     return pipeline
 
 @pytest.fixture
-def client(mock_settings, mock_db, mock_cache, mock_pipeline):
+def client(mock_settings, mock_db, mock_cache, mock_pipeline, mocker):
+    mocker.patch.object(DBService, "connect", new_callable=AsyncMock)
     # Bypass VERDANT API-key auth so these tests can exercise handler logic.
     # Only affects the TestClient; production auth is unchanged.
-    app.dependency_overrides[verify_api_key] = lambda: {"active": True, "key_prefix": "vd_test"}
+    app.dependency_overrides[verify_api_key] = lambda: {"active": True, "key_prefix": "vd_test", "owner_id": "00000000-0000-0000-0000-000000000001"}
+    app.dependency_overrides[verify_reader] = lambda: {"owner_id": "00000000-0000-0000-0000-000000000001"}
     with TestClient(app) as test_client:
         # Override dependencies in app.state AFTER lifespan runs
         app.state.settings = mock_settings

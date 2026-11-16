@@ -9,7 +9,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.auth import verify_api_key, verify_supabase_jwt
+from api.auth import verify_api_key, verify_session
+from api.routers.auth import router as auth_router
 from api.config import get_settings
 from api.routers.audit import router as audit_router
 from api.routers.keys import router as keys_router
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     cache = CacheService(settings)
     db = DBService(settings)
+    await db.connect()
     claude = ClaudeService(settings, db_service=db)
     gemini = GeminiService(settings, db_service=db)
     pipeline = VerdantPipeline(
@@ -133,10 +135,11 @@ async def health(request: Request) -> dict[str, Any]:
 
 # SDK / programmatic surface — authenticated with a VERDANT API key.
 app.include_router(pipeline_router, dependencies=[Depends(verify_api_key)])
-app.include_router(audit_router, dependencies=[Depends(verify_api_key)])
+app.include_router(audit_router)
 app.include_router(webhooks_router, dependencies=[Depends(verify_api_key)])
-app.include_router(reports_router, dependencies=[Depends(verify_api_key)])
+app.include_router(reports_router)
 
-# Dashboard management surface — authenticated with the user's Supabase session.
+# Dashboard management surface uses app-issued JWT sessions.
+app.include_router(auth_router)
 app.include_router(keys_router)
-app.include_router(providers_router, dependencies=[Depends(verify_supabase_jwt)])
+app.include_router(providers_router, dependencies=[Depends(verify_session)])

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from api.auth import verify_session
 from pydantic import BaseModel
 
 router = APIRouter(tags=["providers"])
@@ -18,16 +19,20 @@ class ProviderKeyUpdate(BaseModel):
 
 
 @router.get("/providers/keys")
-async def get_provider_keys_status(request: Request) -> dict[str, Any]:
+async def get_provider_keys_status(request: Request, user: dict = Depends(verify_session)) -> dict[str, Any]:
     """Return which providers have keys configured (without exposing the keys)."""
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
     db = request.app.state.db
     status_map = await db.get_all_provider_keys_status()
     return _envelope(data=status_map)
 
 
 @router.post("/providers/keys")
-async def set_provider_key(request: Request, body: ProviderKeyUpdate) -> dict[str, Any]:
+async def set_provider_key(request: Request, body: ProviderKeyUpdate, user: dict = Depends(verify_session)) -> dict[str, Any]:
     """Save or update a provider API key."""
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
     allowed = {"anthropic", "gemini"}
     if body.provider not in allowed:
         raise HTTPException(

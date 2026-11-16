@@ -167,7 +167,7 @@ async def load_baseline(
     except Exception as exc:
         logger.warning("Baseline DB lookup failed, using fallback baseline: %s", exc)
 
-    output = _build_output(normalized_context, row, source="supabase" if row else "fallback")
+    output = _build_output(normalized_context, row, source="neon" if row else "fallback")
 
     try:
         await cache_service.set_baseline(normalized_context, output.model_dump(mode="json"), ttl_seconds=3600)

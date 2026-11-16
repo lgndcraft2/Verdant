@@ -33,19 +33,18 @@ Edit `.env`:
 ```env
 ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=AIza...
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
+DATABASE_URL=postgresql://user:password@host/neondb?sslmode=require
+JWT_SECRET=replace-with-at-least-32-random-characters
 REDIS_URL=redis://localhost:6379/0
 ```
 
-> **Tip:** VERDANT works without Supabase or Redis — it falls back to in-memory storage. This is fine for local development but not recommended for production.
+Neon Postgres is required. Generate JWT_SECRET with a secure random generator.
 
 ## 3. Install the SDK
 
 ```bash
-cd sdk
-pip install -e .
-cd ..
+pip install -r requirements.txt
+python neon/migrate.py
 ```
 
 ## 4. Start the API Server
@@ -152,7 +151,7 @@ Every call to `client.wrap()` passes through the 5-stage reasoning pipeline:
 4. **Explanation Generation** — Plain-language "why did the AI say this?"
 5. **Trust Synthesis** — 0–100 trust score from all stage signals
 
-The full audit is stored in Supabase and visible in the dashboard.
+The full audit is stored in Neon and visible only to the account that owns its API key.
 
 ---
 

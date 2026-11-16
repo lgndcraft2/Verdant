@@ -14,6 +14,7 @@ def test_list_audits_success(client, mock_db):
     assert data["meta"]["context_type"] == "hiring"
     assert data["data"]["total"] == 2
     assert len(data["data"]["items"]) == 2
+    assert mock_db.list_audits.call_args.kwargs["owner_id"] == "00000000-0000-0000-0000-000000000001"
 
 def test_list_audits_invalid_context(client):
     response = client.get("/audits?context_type=invalid")
@@ -27,6 +28,7 @@ def test_get_audit_success(client, mock_db):
     assert response.status_code == 200
     data = response.json()
     assert data["data"]["id"] == "vd_123"
+    assert mock_db.get_audit.call_args.args[1] == "00000000-0000-0000-0000-000000000001"
 
 def test_get_audit_not_found(client, mock_db):
     mock_db.get_audit.return_value = None

@@ -4,7 +4,8 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+from api.auth import verify_reader
 
 from sdk.verdant.models import ContextType
 
@@ -24,12 +25,11 @@ def _parse_created_at(value: Any) -> datetime:
 
 
 @router.get("/reports/ndpr")
-async def ndpr_report(request: Request, days: int = 30) -> dict[str, Any]:
+async def ndpr_report(request: Request, days: int = 30, key: dict = Depends(verify_reader)) -> dict[str, Any]:
     db = request.app.state.db
-    audits, total = await db.list_audits(limit=5000, offset=0)
-
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    filtered = [audit for audit in audits if _parse_created_at(audit.get("created_at")) >= cutoff]
+    filtered = await db.report_audits(str(key["owner_id"]), cutoff)
+    total = len(filtered)
 
     by_context = Counter()
     flag_counts = Counter()

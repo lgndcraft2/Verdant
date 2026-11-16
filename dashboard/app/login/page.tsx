@@ -1,9 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
-import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const [view, setView] = useState<'login' | 'signup'>('login')
@@ -12,8 +11,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  // Memoize so we don't spin up a new GoTrueClient on every keystroke re-render.
-  const supabase = useMemo(() => createClient(), [])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,21 +28,14 @@ export default function LoginPage() {
 
     try {
       if (view === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
+        const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
+        if (!res.ok) throw new Error((await res.json()).error?.message || 'Sign in failed')
         toast.success('Welcome back!', { id: toastId })
         router.refresh()
         router.push('/overview')
       } else {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            // Stored on user_metadata; surfaced across the dashboard.
-            data: { full_name: name.trim() },
-          },
-        })
-        if (error) throw error
+        const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, full_name: name.trim() }) })
+        if (!res.ok) throw new Error((await res.json()).error?.message || 'Registration failed')
         toast.success('Account created! Welcome to VERDANT.', { id: toastId })
         router.refresh()
         router.push('/overview')

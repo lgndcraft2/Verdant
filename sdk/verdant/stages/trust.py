@@ -55,6 +55,7 @@ async def synthesize_trust_score(
     explanation: ExplainStageOutput,
     settings: Settings | None = None,
     db_service: DBService | None = None,
+    owner_id: str | None = None,
 ) -> TrustStageOutput:
     settings = settings or get_settings()
     db_service = db_service or DBService(settings)
@@ -69,18 +70,26 @@ async def synthesize_trust_score(
 
     historical_audits = []
     try:
-        historical_audits = await db_service.fetch_recent_audits(intent.context_type, limit=20)
+        historical_audits = await db_service.fetch_recent_audits(intent.context_type, limit=20, owner_id=owner_id)
     except Exception:
         historical_audits = []
     historical_pattern_consistency = _historical_consistency(bias_signal_strength, historical_audits)
 
-    trust_score = round(
+    composite_score = round(
         (0.40 * bias_signal_strength)
         + (0.30 * explanation_confidence)
         + (0.20 * intent_alignment)
         + (0.10 * historical_pattern_consistency)
     )
-    trust_score = max(0, min(100, trust_score))
+    trust_score = max(0, min(100, composite_score))
+    # A strong bias match must not be outweighed by a confident explanation.
+    severity_cap = {
+        BiasSeverity.medium: 69,
+        BiasSeverity.high: 39,
+        BiasSeverity.critical: 19,
+    }.get(bias.severity)
+    if severity_cap is not None:
+        trust_score = min(trust_score, severity_cap)
 
     alerts: list[str] = []
     if trust_score < settings.trust_score_alert_threshold:
@@ -96,6 +105,8 @@ async def synthesize_trust_score(
         f"Intent alignment: {intent_alignment:.1f}/100.",
         f"Historical pattern consistency: {historical_pattern_consistency:.1f}/100.",
     ]
+    if severity_cap is not None and trust_score < composite_score:
+        reasons.append(f"Trust capped at {severity_cap} due to {bias.severity.value} bias severity.")
 
     confidence = (intent.confidence + baseline.confidence + bias.confidence + explanation.confidence) / 4.0
 
@@ -107,6 +118,7 @@ async def synthesize_trust_score(
             "explanation_confidence": explanation_confidence,
             "intent_alignment": intent_alignment,
             "historical_pattern_consistency": historical_pattern_consistency,
+            "composite_before_safety_cap": float(composite_score),
         },
         reasons=reasons,
         alerts=alerts,

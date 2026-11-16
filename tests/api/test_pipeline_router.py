@@ -80,3 +80,13 @@ def test_pipeline_analyze_success(client, mock_pipeline, mock_db):
     _, kwargs = mock_pipeline.run.call_args
     assert kwargs.get("precomputed_output") == "precomputed text"
     mock_db.insert_audit_log.assert_called_once()
+
+
+def test_pipeline_fails_when_audit_cannot_be_saved(client, mock_pipeline, mock_db):
+    mock_pipeline.run.return_value = _make_result()
+    mock_db.insert_audit_log.side_effect = RuntimeError("database unavailable")
+    response = client.post("/pipeline/analyze", json={
+        "input_text": "Test Input", "output_text": "precomputed text", "context_type": "hiring"
+    })
+    assert response.status_code == 500
+    assert "database unavailable" not in response.text

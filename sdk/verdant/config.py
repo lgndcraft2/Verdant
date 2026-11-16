@@ -23,8 +23,8 @@ class Settings(BaseModel):
     verdant_api_url: str = DEFAULT_API_URL
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
-    supabase_url: str = ""
-    supabase_service_role_key: str = ""
+    database_url: str = ""
+    jwt_secret: str = ""
     redis_url: str = "redis://localhost:6379/0"
     webhook_secret: str = ""
     environment: str = "development"
@@ -43,8 +43,8 @@ class Settings(BaseModel):
             verdant_api_url=os.getenv("VERDANT_API_URL", DEFAULT_API_URL),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
-            supabase_url=os.getenv("SUPABASE_URL", ""),
-            supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""),
+            database_url=os.getenv("DATABASE_URL", ""),
+            jwt_secret=os.getenv("JWT_SECRET", ""),
             redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
             webhook_secret=os.getenv("WEBHOOK_SECRET", ""),
             environment=os.getenv("ENVIRONMENT", "development"),

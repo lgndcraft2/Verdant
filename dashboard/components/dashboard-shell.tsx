@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { FileTextIcon, GearIcon, HomeIcon, MenuIcon, TraceIcon, UserIcon, XIcon } from "./icons";
 
 const navItems = [
@@ -124,17 +123,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
-  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!active || !data.user) return;
-      const meta = data.user.user_metadata ?? {};
-      const email = data.user.email ?? "";
+    fetch('/api/auth/me').then((res) => res.json()).then(({ data }) => {
+      if (!active || !data) return;
+      const meta = { full_name: data.full_name };
+      const email = data.email ?? "";
       const name =
         (meta.full_name as string) ||
-        (meta.name as string) ||
         email.split("@")[0] ||
         "Account";
       setUser({ name, email });
@@ -142,7 +139,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [supabase]);
+  }, []);
 
   return (
     <div className="flex min-h-dvh bg-slate-50 text-slate-950 dark:bg-[#100a0b] dark:text-slate-50">

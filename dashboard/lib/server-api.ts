@@ -9,20 +9,21 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ??
   'https://verdant-be.onrender.com'
 
-const KEY = process.env.VERDANT_API_KEY ?? ''
+import { cookies } from 'next/headers'
 
 export type ServerFetch<T> =
   | { ok: true; data: T }
   | { ok: false; reason: 'unconfigured' | 'error'; message?: string }
 
 export async function serverGet<T>(path: string, timeoutMs = 8000): Promise<ServerFetch<T>> {
-  if (!KEY) return { ok: false, reason: 'unconfigured' }
+  const token = cookies().get('verdant_session')?.value
+  if (!token) return { ok: false, reason: 'unconfigured' }
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const res = await fetch(`${API_URL}${path}`, {
-      headers: { Authorization: `Bearer ${KEY}` },
+      headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
       signal: controller.signal,
     })

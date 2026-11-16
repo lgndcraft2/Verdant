@@ -18,7 +18,7 @@ export function ProviderKeysForm() {
 
   useEffect(() => {
     getAuthHeader()
-      .then((headers) => fetchWithTimeout(`${API_URL}/providers/keys`, { headers }))
+      .then((headers) => fetchWithTimeout('/api/backend/providers/keys', { headers }))
       .then((res) => res.json())
       .then((json) => {
         if (json.data) {
@@ -39,7 +39,7 @@ export function ProviderKeysForm() {
 
     try {
       const authHeader = await getAuthHeader()
-      const res = await fetchWithTimeout(`${API_URL}/providers/keys`, {
+      const res = await fetchWithTimeout('/api/backend/providers/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader },
         body: JSON.stringify({ provider, api_key: key }),

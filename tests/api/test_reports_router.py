@@ -2,13 +2,12 @@ from datetime import datetime, timezone
 
 def test_ndpr_report(client, mock_db):
     now = datetime.now(timezone.utc).isoformat()
-    mock_db.list_audits.return_value = (
+    mock_db.report_audits.return_value = (
         [
             {"id": "1", "context_type": "hiring", "trust_score": 85, "flags": [], "created_at": now},
             {"id": "2", "context_type": "lending", "trust_score": 35, "flags": ["geographic_bias"], "created_at": now},
             {"id": "3", "context_type": "hiring", "trust_score": 90, "flags": [], "created_at": now},
-        ],
-        3
+        ]
     )
     
     response = client.get("/reports/ndpr?days=30")

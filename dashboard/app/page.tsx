@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import {
   ArrowIcon,
   CheckIcon,
@@ -80,11 +80,7 @@ print(result.flags)         # ["proxy_language_detected"]
 print(result.explanation)   # Plain-language rationale`;
 
 export default async function Home() {
-  const supabase = createClient();
-  // getUser() revalidates the token against the Auth server; getSession() only
-  // reads the cookie and is not safe to trust server-side.
-  const { data: { user } } = await supabase.auth.getUser();
-  const isSignedIn = !!user;
+  const isSignedIn = !!cookies().get("verdant_session");
 
   return (
     <main className="relative min-h-dvh overflow-hidden bg-[#fdfcfc] text-slate-950 dark:bg-[#100a0b] dark:text-slate-50">
