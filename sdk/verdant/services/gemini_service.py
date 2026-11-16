@@ -24,6 +24,9 @@ class GeminiService:
         self.settings = settings or get_settings()
         self.model_name = self.settings.gemini_model
         self._client = None
+        self._account_clients: dict[str, Any] = {}
+        self._account_keys: dict[str, str] = {}
+        self._request_lock = asyncio.Lock()
         self._db_service = db_service
         self._prompts_dir = Path(__file__).resolve().parent / "prompts"
 
@@ -36,21 +39,26 @@ class GeminiService:
             except Exception as exc:  # pragma: no cover - import/runtime guard
                 logger.warning("Gemini client unavailable: %s", exc)
 
-    async def _ensure_client(self) -> None:
-        """Lazily configure the Gemini client from DB-stored keys if not already set."""
-        if self._client is not None:
-            return
-        if self._db_service is None:
-            return
+    async def _ensure_client(self, owner_id: str | None = None):
+        """Resolve an account-specific Gemini client when a key is configured."""
+        if owner_id is None:
+            return self._client
+        if owner_id in self._account_clients:
+            return self._account_clients[owner_id]
         try:
-            key = await self._db_service.get_provider_key("gemini")
+            key = await self._db_service.get_provider_key("gemini", owner_id) if self._db_service else None
             if key:
                 import google.generativeai as genai
-                genai.configure(api_key=key)
-                self._client = genai
-                logger.info("Gemini client initialized from DB-stored provider key.")
+                self._account_clients[owner_id] = genai
+                self._account_keys[owner_id] = key
+                return genai
         except Exception as exc:
             logger.warning("Failed to initialize Gemini client from DB key: %s", exc)
+        return None if self._db_service else self._client
+
+    def clear_account_client(self, owner_id: str) -> None:
+        self._account_clients.pop(owner_id, None)
+        self._account_keys.pop(owner_id, None)
 
     def _load_prompt(self, prompt_name: str) -> str:
         prompt_path = self._prompts_dir / f"{prompt_name}.txt"
@@ -75,13 +83,13 @@ class GeminiService:
             raise ValueError("Gemini response did not contain a JSON object")
         return payload
 
-    async def _invoke(self, system_prompt: str, user_prompt: str, temperature: float = 0.0) -> str:
-        await self._ensure_client()
-        if self._client is None:
+    async def _invoke(self, system_prompt: str, user_prompt: str, temperature: float = 0.0, owner_id: str | None = None) -> str:
+        client = await self._ensure_client(owner_id)
+        if client is None:
             raise RuntimeError("Gemini client is not configured. Set GEMINI_API_KEY or add it via the Dashboard.")
 
         def _run() -> str:
-            model = self._client.GenerativeModel(
+            model = client.GenerativeModel(
                 model_name=self.model_name,
                 system_instruction=system_prompt,
             )
@@ -93,7 +101,10 @@ class GeminiService:
                 return response.text
             return str(response)
 
-        return await asyncio.to_thread(_run)
+        async with self._request_lock:
+            if owner_id is not None and owner_id in self._account_keys:
+                client.configure(api_key=self._account_keys[owner_id])
+            return await asyncio.to_thread(_run)
 
     async def generate_json(
         self,
@@ -102,9 +113,10 @@ class GeminiService:
         response_model: type[T],
         *,
         temperature: float = 0.0,
+        owner_id: str | None = None,
     ) -> T:
         system_prompt = self._load_prompt(prompt_name)
-        raw_text = await self._invoke(system_prompt, user_prompt, temperature=temperature)
+        raw_text = await self._invoke(system_prompt, user_prompt, temperature=temperature, owner_id=owner_id)
         payload = self._parse_json(raw_text)
         return response_model.model_validate(payload)
 
@@ -114,6 +126,7 @@ class GeminiService:
         user_prompt: str,
         *,
         temperature: float = 0.0,
+        owner_id: str | None = None,
     ) -> str:
         class _GeneratedCompletion(BaseModel):
             output: str
@@ -124,6 +137,7 @@ class GeminiService:
             user_prompt,
             _GeneratedCompletion,
             temperature=temperature,
+            owner_id=owner_id,
         )
         return completion.output
 

@@ -30,6 +30,7 @@ class ClaudeService:
         self.settings = settings or get_settings()
         self.model_name = self.settings.claude_model
         self._client = None
+        self._account_clients: dict[str, Any] = {}
         self._db_service = db_service
         self._prompts_dir = Path(__file__).resolve().parent / "prompts"
 
@@ -41,20 +42,28 @@ class ClaudeService:
             except Exception as exc:  # pragma: no cover - import/runtime guard
                 logger.warning("Anthropic client unavailable: %s", exc)
 
-    async def _ensure_client(self) -> None:
-        """Lazily configure the Anthropic client from DB-stored keys if not already set."""
-        if self._client is not None:
-            return
-        if self._db_service is None:
-            return
+    async def _ensure_client(self, owner_id: str | None = None):
+        """Resolve a request-scoped client, preferring the account's own key."""
+        if owner_id is None:
+            return self._client
+        if owner_id in self._account_clients:
+            return self._account_clients[owner_id]
         try:
-            key = await self._db_service.get_provider_key("anthropic")
+            key = await self._db_service.get_provider_key("anthropic", owner_id) if self._db_service else None
             if key:
                 from anthropic import AsyncAnthropic
-                self._client = AsyncAnthropic(api_key=key)
-                logger.info("Anthropic client initialized from DB-stored provider key.")
+                client = AsyncAnthropic(api_key=key)
+                self._account_clients[owner_id] = client
+                return client
         except Exception as exc:
             logger.warning("Failed to initialize Anthropic client from DB key: %s", exc)
+        return None if self._db_service else self._client
+
+    def clear_account_client(self, owner_id: str) -> None:
+        client = self._account_clients.pop(owner_id, None)
+        if client is not None:
+            import asyncio
+            asyncio.create_task(client.close())
 
     def _load_prompt(self, prompt_name: str) -> str:
         prompt_path = self._prompts_dir / f"{prompt_name}.txt"
@@ -114,12 +123,12 @@ class ClaudeService:
             raise ValueError("Claude response did not contain a JSON object")
         return payload
 
-    async def _invoke(self, system_prompt: str, user_prompt: str, temperature: float = 0.0) -> str:
-        await self._ensure_client()
-        if self._client is None:
+    async def _invoke(self, system_prompt: str, user_prompt: str, temperature: float = 0.0, owner_id: str | None = None) -> str:
+        client = await self._ensure_client(owner_id)
+        if client is None:
             raise RuntimeError("Anthropic client is not configured. Set ANTHROPIC_API_KEY or add it via the Dashboard.")
 
-        response = await self._client.messages.create(
+        response = await client.messages.create(
             model=self.model_name,
             max_tokens=1024,
             temperature=temperature,
@@ -135,9 +144,10 @@ class ClaudeService:
         response_model: type[T],
         *,
         temperature: float = 0.0,
+        owner_id: str | None = None,
     ) -> T:
         system_prompt = self._load_prompt(prompt_name)
-        raw_text = await self._invoke(system_prompt, user_prompt, temperature=temperature)
+        raw_text = await self._invoke(system_prompt, user_prompt, temperature=temperature, owner_id=owner_id)
         payload = self._parse_json(raw_text)
         return response_model.model_validate(payload)
 
@@ -147,11 +157,13 @@ class ClaudeService:
         user_prompt: str,
         *,
         temperature: float = 0.0,
+        owner_id: str | None = None,
     ) -> str:
         completion = await self.generate_json(
             prompt_name,
             user_prompt,
             _GeneratedCompletion,
             temperature=temperature,
+            owner_id=owner_id,
         )
         return completion.output

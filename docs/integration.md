@@ -20,10 +20,10 @@ VERDANT uses **two kinds of keys**, and it matters which lives where:
 | Key | Where it goes | Purpose |
 |---|---|---|
 | **VERDANT API key** (`vd_live_...`) | Your app (`VERDANT_API_KEY`) | Authenticates you to VERDANT |
-| **Provider keys** (Anthropic / Gemini) | The **dashboard** → Settings → Provider Keys | Let the VERDANT server run the reasoning stages |
+| **Provider keys** (Anthropic / Gemini) | Your **dashboard account** → Settings → Provider Keys | Let the VERDANT server run the reasoning stages for your account |
 
 1. Dashboard → **Settings → API keys → Generate key** → copy the `vd_live_...` value (shown once).
-2. Dashboard → **Settings → Provider Keys** → paste your Anthropic and/or Gemini key.
+2. Dashboard → **Settings → Provider Keys** → paste your Anthropic and/or Gemini key. Provider keys belong to your account.
 
 You **do not** put provider keys in your app — the server uses the ones from the dashboard.
 

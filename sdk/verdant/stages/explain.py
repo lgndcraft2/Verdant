@@ -21,6 +21,7 @@ async def generate_explanation(
     settings: Settings | None = None,
     claude_service: ClaudeService | None = None,
     gemini_service: GeminiService | None = None,
+    owner_id: str | None = None,
 ) -> ExplainStageOutput:
     settings = settings or get_settings()
     claude_service = claude_service or ClaudeService(settings)
@@ -36,12 +37,12 @@ async def generate_explanation(
     )
 
     try:
-        return await claude_service.generate_json("explain", user_prompt, ExplainStageOutput)
+        return await claude_service.generate_json("explain", user_prompt, ExplainStageOutput, owner_id=owner_id)
     except Exception as exc:
         logger.warning("Claude explanation generation failed, falling back to Gemini: %s", exc)
 
     try:
-        return await gemini_service.generate_json("explain", user_prompt, ExplainStageOutput)
+        return await gemini_service.generate_json("explain", user_prompt, ExplainStageOutput, owner_id=owner_id)
     except Exception as exc:
         logger.error("Gemini explanation generation failed and heuristic fallback is disabled: %s", exc)
         raise ProviderUnavailableError(

@@ -68,7 +68,7 @@ export function ProviderKeysForm() {
         LLM Provider Keys
       </h2>
       <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-        Supply the API keys for the language models. VERDANT abstracts these costs and complexity away from your developers.
+        Add your own model-provider keys. They are stored on your account and used only for your pipeline requests.
       </p>
 
       {message && (

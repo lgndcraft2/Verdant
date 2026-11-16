@@ -20,19 +20,15 @@ class ProviderKeyUpdate(BaseModel):
 
 @router.get("/providers/keys")
 async def get_provider_keys_status(request: Request, user: dict = Depends(verify_session)) -> dict[str, Any]:
-    """Return which providers have keys configured (without exposing the keys)."""
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    """Return this account's provider-key status without exposing the keys."""
     db = request.app.state.db
-    status_map = await db.get_all_provider_keys_status()
+    status_map = await db.get_provider_keys_status(user["user_id"])
     return _envelope(data=status_map)
 
 
 @router.post("/providers/keys")
 async def set_provider_key(request: Request, body: ProviderKeyUpdate, user: dict = Depends(verify_session)) -> dict[str, Any]:
-    """Save or update a provider API key."""
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    """Save or update a provider API key for this account only."""
     allowed = {"anthropic", "gemini"}
     if body.provider not in allowed:
         raise HTTPException(
@@ -41,13 +37,10 @@ async def set_provider_key(request: Request, body: ProviderKeyUpdate, user: dict
         )
 
     db = request.app.state.db
-    await db.set_provider_key(body.provider, body.api_key)
-
-    # Reset the cached LLM service client so it picks up the new key on next call
-    if body.provider == "anthropic" and hasattr(request.app.state, "claude"):
-        request.app.state.claude._client = None
-    elif body.provider == "gemini" and hasattr(request.app.state, "gemini"):
-        request.app.state.gemini._client = None
+    await db.set_provider_key(user["user_id"], body.provider, body.api_key)
+    service = getattr(request.app.state, "claude" if body.provider == "anthropic" else "gemini", None)
+    if service and hasattr(service, "clear_account_client"):
+        service.clear_account_client(user["user_id"])
 
     return _envelope(
         data={"provider": body.provider, "configured": bool(body.api_key)},

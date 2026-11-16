@@ -18,7 +18,7 @@ the HTTP request/response path are real application code. The in-process API
 does not persist an audit to Neon.
 
 For a live hosted demo, deploy the migrated backend with `DATABASE_URL` and
-`JWT_SECRET`, register a dashboard account, promote the provider-key admin,
-configure an Anthropic or Gemini key, and issue a VERDANT API key. Then run
+`JWT_SECRET`, register a dashboard account, configure an Anthropic or Gemini
+key in that account's Settings, and issue a VERDANT API key. Then run
 `demo_verdant.py` with `VERDANT_KEY` set. Do not describe the live path as
 ready until those steps and a successful `/pipeline/analyze` call are verified.

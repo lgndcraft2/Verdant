@@ -129,6 +129,7 @@ class VerdantPipeline:
         intent: IntentStageOutput,
         baseline: BaselineStageOutput,
         metadata: dict[str, Any],
+        owner_id: str | None = None,
     ) -> tuple[str, str]:
         """Generate the upstream output and return ``(output_text, model_name)``."""
         prompt = (
@@ -141,12 +142,12 @@ class VerdantPipeline:
         )
 
         try:
-            return await self.claude_service.generate_text("generate", prompt), self.claude_service.model_name
+            return await self.claude_service.generate_text("generate", prompt, owner_id=owner_id), self.claude_service.model_name
         except Exception as exc:
             logger.warning("Claude default generation failed, falling back to Gemini: %s", exc)
 
         try:
-            return await self.gemini_service.generate_text("generate", prompt), self.gemini_service.model_name
+            return await self.gemini_service.generate_text("generate", prompt, owner_id=owner_id), self.gemini_service.model_name
         except Exception as exc:
             logger.error("Gemini default generation failed and echo fallback is disabled: %s", exc)
             raise ProviderUnavailableError(
@@ -176,6 +177,7 @@ class VerdantPipeline:
             settings=self.settings,
             claude_service=self.claude_service,
             gemini_service=self.gemini_service,
+            owner_id=owner_id,
         )
 
         baseline_context = ContextType.normalize(context_type) if context_type else intent.context_type
@@ -201,7 +203,7 @@ class VerdantPipeline:
         elif fn is None:
             try:
                 raw_output, output_model_name = await self._generate_default_output(
-                    resolved_input_text, intent, baseline, metadata
+                    resolved_input_text, intent, baseline, metadata, owner_id
                 )
                 clean_output = raw_output
             except ProviderUnavailableError:
@@ -238,6 +240,7 @@ class VerdantPipeline:
             settings=self.settings,
             claude_service=self.claude_service,
             gemini_service=self.gemini_service,
+            owner_id=owner_id,
         )
         trust = await synthesize_trust_score(
             intent=intent,

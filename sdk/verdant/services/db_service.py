@@ -154,14 +154,20 @@ class DBService:
         return _row(await self._pool().fetchrow(
             "select id,email,full_name,role from users where id=$1", UUID(user_id)))
 
-    async def get_provider_key(self, provider: str) -> str | None:
-        return await self._pool().fetchval("select api_key from provider_keys where provider=$1", provider)
+    async def get_provider_key(self, provider: str, owner_id: str | None = None) -> str | None:
+        if owner_id is None:
+            return None
+        return await self._pool().fetchval(
+            "select api_key from user_provider_keys where owner_id=$1 and provider=$2",
+            UUID(owner_id), provider)
 
-    async def set_provider_key(self, provider: str, api_key: str) -> None:
+    async def set_provider_key(self, owner_id: str, provider: str, api_key: str) -> None:
         await self._pool().execute(
-            "insert into provider_keys (provider,api_key) values ($1,$2) on conflict(provider) do update set api_key=excluded.api_key,updated_at=now()",
-            provider, api_key)
+            "insert into user_provider_keys (owner_id,provider,api_key) values ($1,$2,$3) "
+            "on conflict(owner_id,provider) do update set api_key=excluded.api_key,updated_at=now()",
+            UUID(owner_id), provider, api_key)
 
-    async def get_all_provider_keys_status(self) -> dict[str, bool]:
-        records = await self._pool().fetch("select provider,api_key from provider_keys")
+    async def get_provider_keys_status(self, owner_id: str) -> dict[str, bool]:
+        records = await self._pool().fetch(
+            "select provider,api_key from user_provider_keys where owner_id=$1", UUID(owner_id))
         return {r["provider"]: bool(r["api_key"]) for r in records}

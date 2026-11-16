@@ -18,6 +18,7 @@ async def extract_intent(
     settings: Settings | None = None,
     claude_service: ClaudeService | None = None,
     gemini_service: GeminiService | None = None,
+    owner_id: str | None = None,
 ) -> IntentStageOutput:
     settings = settings or get_settings()
     context_hint = ContextType.normalize(context_type) if context_type else None
@@ -36,12 +37,12 @@ async def extract_intent(
         return result
 
     try:
-        return _apply_hint(await claude_service.generate_json("intent", user_prompt, IntentStageOutput))
+        return _apply_hint(await claude_service.generate_json("intent", user_prompt, IntentStageOutput, owner_id=owner_id))
     except Exception as exc:
         logger.warning("Claude intent extraction failed, falling back to Gemini: %s", exc)
 
     try:
-        return _apply_hint(await gemini_service.generate_json("intent", user_prompt, IntentStageOutput))
+        return _apply_hint(await gemini_service.generate_json("intent", user_prompt, IntentStageOutput, owner_id=owner_id))
     except Exception as exc:
         logger.error("Gemini intent extraction failed and heuristic fallback is disabled: %s", exc)
         raise ProviderUnavailableError(

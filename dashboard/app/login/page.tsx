@@ -22,6 +22,10 @@ export default function LoginPage() {
       toast.error('Please enter your name')
       return
     }
+    if (view === 'signup' && password.length < 12) {
+      toast.error('Password must be at least 12 characters')
+      return
+    }
 
     setLoading(true)
     const toastId = toast.loading(view === 'login' ? 'Signing in...' : 'Creating account...')
@@ -133,10 +137,17 @@ export default function LoginPage() {
               name="password"
               type="password"
               required
+              minLength={view === 'signup' ? 12 : undefined}
+              maxLength={256}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500 dark:border-white/10 dark:bg-white/5 dark:text-white"
             />
+            {view === 'signup' && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Use at least 12 characters.
+              </p>
+            )}
           </div>
 
           <div className="mt-4">

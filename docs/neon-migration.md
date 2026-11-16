@@ -9,11 +9,10 @@ The dashboard needs `VERDANT_API_URL` (or `NEXT_PUBLIC_API_URL`) pointing
 to the API. Its sign-in flow stores the app JWT in an HTTP-only cookie. Remove
 the old Supabase variables from both deployment environments.
 
-Register an account in the dashboard, then promote the intended provider-key
-administrator with `python neon/promote_admin.py email@example.com`.
-Only that role can edit the shared Anthropic and Gemini credentials. Users
-must register again because Supabase Auth sessions and passwords are not
-accepted by the new auth service.
+Provider keys are stored per account. Each user can add their Anthropic or
+Gemini key from Settings; the key is used only for that account's pipeline
+requests. Users must register again because Supabase Auth sessions and
+passwords are not accepted by the new auth service.
 
 Existing Supabase rows are **not transferred** by the schema command.
 The old audit table has no owner field, so there is no safe automatic way
